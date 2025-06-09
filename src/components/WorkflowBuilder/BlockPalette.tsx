@@ -13,7 +13,7 @@ import {
 import { useWorkflowStore } from '../../stores/workflowStore';
 import { BlockTemplate } from '../../types/workflow';
 import { useAuth } from '../../hooks/useAuth';
-import { supabase } from '../../lib/supabase';
+import { ActivepiecesService } from '../../services/activepieces';
 
 interface BlockPaletteProps {
   isOpen: boolean;
@@ -35,23 +35,22 @@ const BlockPalette: React.FC<BlockPaletteProps> = ({ isOpen, onClose }) => {
   }, [workspace?.id]);
 
   const loadIntegrations = async () => {
-    if (!workspace?.id) return;
-
     try {
-      const { data, error } = await supabase
-        .from('integrations')
-        .select('*')
-        .eq('workspace_id', workspace.id)
-        .eq('is_active', true);
-
-      if (error) {
-        console.error('Failed to load integrations:', error);
-        return;
-      }
-
-      setIntegrations(data || []);
+      const activepiecesService = new ActivepiecesService({
+        baseUrl: 'https://activepieces-production-aa7c.up.railway.app'
+      });
+      
+      const apps = await activepiecesService.getAvailableIntegrations();
+      setIntegrations(apps || []);
     } catch (error) {
-      console.error('Error loading integrations:', error);
+      console.error('Failed to load integrations:', error);
+      // Use fallback integrations
+      setIntegrations([
+        { name: 'slack', displayName: 'Slack' },
+        { name: 'notion', displayName: 'Notion' },
+        { name: 'gmail', displayName: 'Gmail' },
+        { name: 'github', displayName: 'GitHub' }
+      ]);
     }
   };
 
@@ -285,18 +284,18 @@ const BlockPalette: React.FC<BlockPaletteProps> = ({ isOpen, onClose }) => {
       }
     ];
 
-    // Add integration templates
+    // Add integration templates from Activepieces
     const integrationTemplates: BlockTemplate[] = integrations.map(integration => ({
-      id: `integration-${integration.id}`,
+      id: `integration-${integration.name}`,
       type: 'integration',
-      label: integration.service,
-      description: `${integration.service} integration`,
+      label: integration.displayName,
+      description: `${integration.displayName} integration via Activepieces`,
       icon: 'Zap',
       category: 'integrations',
       color: 'from-red-500 to-red-600',
-      integrationId: integration.id,
+      integrationId: integration.name,
       defaultConfig: {
-        integrationId: integration.id,
+        integrationId: integration.name,
         endpoint: '',
         method: 'GET',
         headers: {},
@@ -457,7 +456,7 @@ const BlockPalette: React.FC<BlockPaletteProps> = ({ isOpen, onClose }) => {
       {/* Help Text */}
       <div className="p-4 border-t border-gray-200 bg-blue-50">
         <p className="text-xs text-blue-700">
-          💡 Drag blocks onto the canvas to build your workflow
+          💡 Drag blocks onto the canvas to build your workflow. Powered by Activepieces.
         </p>
       </div>
     </div>

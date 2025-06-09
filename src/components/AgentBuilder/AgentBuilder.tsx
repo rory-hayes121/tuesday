@@ -21,6 +21,7 @@ import PropertiesPanel from '../WorkflowBuilder/PropertiesPanel';
 import WorkflowToolbar from '../WorkflowBuilder/WorkflowToolbar';
 import TestRunner from '../WorkflowBuilder/TestRunner';
 import WorkflowPreview from '../WorkflowBuilder/WorkflowPreview';
+import ActivepiecesDeployment from '../WorkflowBuilder/ActivepiecesDeployment';
 
 interface AgentBuilderProps {
   agentId?: string | null;
@@ -38,7 +39,7 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, onSave, onTest }) 
   const [isLoading, setIsLoading] = useState(false);
   const [showTestRunner, setShowTestRunner] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [isDeploying, setIsDeploying] = useState(false);
+  const [showActivepiecesDeploy, setShowActivepiecesDeploy] = useState(false);
 
   const { user, workspace } = useAuth();
   const { 
@@ -173,7 +174,7 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, onSave, onTest }) 
     setShowPreview(true);
   }, []);
 
-  const handleDeploy = useCallback(async () => {
+  const handleActivepiecesDeploy = useCallback(() => {
     // Validate workflow before deployment
     const validation = validateWorkflow();
     if (!validation.isValid) {
@@ -186,40 +187,8 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, onSave, onTest }) 
       return;
     }
 
-    setIsDeploying(true);
-    try {
-      // Call the backend API to deploy to Windmill
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/deploy-to-windmill`;
-      
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          agentId,
-          agentName,
-          workflowData: { nodes, edges }
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Unknown error occurred' }));
-        throw new Error(errorData.error || 'Failed to deploy to Windmill');
-      }
-
-      const result = await response.json();
-      console.log('Deployment successful:', result);
-      
-      alert('Agent deployed to Windmill successfully!');
-    } catch (error: any) {
-      console.error('Deployment failed:', error);
-      alert(`Deployment failed: ${error.message}`);
-    } finally {
-      setIsDeploying(false);
-    }
-  }, [agentId, agentName, nodes, edges, validateWorkflow]);
+    setShowActivepiecesDeploy(true);
+  }, [validateWorkflow, agentId]);
 
   const handleNodeSelect = useCallback((nodeId: string | null) => {
     setSelectedNodeId(nodeId);
@@ -269,24 +238,14 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, onSave, onTest }) 
             </div>
           </div>
           
-          {/* Deploy Button (only show for saved agents) */}
+          {/* Deploy to Activepieces Button (only show for saved agents) */}
           {agentId && (
             <button
-              onClick={handleDeploy}
-              disabled={isDeploying}
-              className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center space-x-2 disabled:opacity-50"
+              onClick={handleActivepiecesDeploy}
+              className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center space-x-2"
             >
-              {isDeploying ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Deploying...</span>
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4" />
-                  <span>Deploy</span>
-                </>
-              )}
+              <Upload className="w-4 h-4" />
+              <span>Deploy to Activepieces</span>
             </button>
           )}
         </div>
@@ -344,6 +303,13 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, onSave, onTest }) 
       <WorkflowPreview
         isOpen={showPreview}
         onClose={() => setShowPreview(false)}
+      />
+
+      <ActivepiecesDeployment
+        isOpen={showActivepiecesDeploy}
+        onClose={() => setShowActivepiecesDeploy(false)}
+        agentId={agentId || 'new'}
+        agentName={agentName}
       />
     </div>
   );
