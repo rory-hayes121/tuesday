@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { BlockTemplate } from '../../types/workflow';
 import { useAuth } from '../../hooks/useAuth';
-// import { activepiecesClient } from '../../services/activepieces';
+import { activepiecesClient } from '../../services/activepieces';
 
 interface BlockPaletteProps {
   isOpen: boolean;
@@ -35,19 +35,15 @@ const BlockPalette: React.FC<BlockPaletteProps> = ({ isOpen, onClose }) => {
 
   const loadIntegrations = async () => {
     try {
-      // TODO: Re-enable when activepieces import is fixed
-      // const apps = await activepiecesClient.listPieces();
-      // setIntegrations(apps || []);
-      
-      // Use fallback integrations for now
-      setIntegrations([
-        { name: 'slack', displayName: 'Slack' },
-        { name: 'notion', displayName: 'Notion' },
-        { name: 'gmail', displayName: 'Gmail' },
-        { name: 'github', displayName: 'GitHub' }
-      ]);
+      const pieces = await activepiecesClient.listPieces();
+      const formattedIntegrations = pieces.map((piece: any) => ({
+        name: piece.name || piece.displayName?.toLowerCase() || 'unknown',
+        displayName: piece.displayName || piece.name || 'Unknown',
+        description: piece.description || `${piece.displayName || piece.name} integration`
+      }));
+      setIntegrations(formattedIntegrations);
     } catch (error) {
-      console.error('Failed to load integrations:', error);
+      console.error('Failed to load Activepieces integrations:', error);
       // Use fallback integrations
       setIntegrations([
         { name: 'slack', displayName: 'Slack' },

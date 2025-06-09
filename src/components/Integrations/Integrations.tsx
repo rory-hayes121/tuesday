@@ -11,7 +11,7 @@ import {
   AlertCircle,
   RefreshCw
 } from 'lucide-react';
-// import { ActivepiecesService } from '../../services/activepieces';
+import { activepiecesClient } from '../../services/activepieces';
 import { Tool } from '../../types';
 
 const Integrations: React.FC = () => {
@@ -24,11 +24,6 @@ const Integrations: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
 
-  // const getActivepiecesService = () => {
-  //   const baseUrl = import.meta.env.VITE_ACTIVEPIECES_URL || 'https://demo.activepieces.com';
-  //   return new ActivepiecesService({ baseUrl });
-  // };
-
   useEffect(() => {
     loadAvailableIntegrations();
   }, []);
@@ -36,67 +31,21 @@ const Integrations: React.FC = () => {
   const loadAvailableIntegrations = async () => {
     try {
       setIsLoading(true);
-      // TODO: Re-enable when ActivepiecesService is fixed
-      // const activepiecesService = getActivepiecesService();
-      // const apps = await activepiecesService.getAvailableIntegrations();
-      // setAvailableApps(apps);
+      const pieces = await activepiecesClient.listPieces();
+      const formattedApps = pieces.map((piece: any) => ({
+        name: piece.name || piece.displayName?.toLowerCase() || 'unknown',
+        displayName: piece.displayName || piece.name || 'Unknown',
+        description: piece.description || `${piece.displayName || piece.name} integration`,
+        logoUrl: piece.logoUrl || '',
+        auth: { type: 'API_KEY', required: true },
+        actions: piece.actions || [{ name: 'execute', displayName: 'Execute' }]
+      }));
+      setAvailableApps(formattedApps);
       
       // Mock some connected integrations for demo
       setConnectedIntegrations([
         { id: 'slack', name: 'Slack', icon: 'MessageSquare', connected: true, category: 'communication' },
         { id: 'notion', name: 'Notion', icon: 'FileText', connected: true, category: 'productivity' }
-      ]);
-      
-      // Fallback to mock data for now
-      setAvailableApps([
-        {
-          name: 'slack',
-          displayName: 'Slack',
-          description: 'Team communication and collaboration',
-          logoUrl: '',
-          auth: { type: 'OAUTH2', required: true },
-          actions: [{ name: 'send_message', displayName: 'Send Message' }]
-        },
-        {
-          name: 'notion',
-          displayName: 'Notion',
-          description: 'All-in-one workspace for notes and docs',
-          logoUrl: '',
-          auth: { type: 'API_KEY', required: true },
-          actions: [{ name: 'create_page', displayName: 'Create Page' }]
-        },
-        {
-          name: 'gmail',
-          displayName: 'Gmail',
-          description: 'Email service by Google',
-          logoUrl: '',
-          auth: { type: 'OAUTH2', required: true },
-          actions: [{ name: 'send_email', displayName: 'Send Email' }]
-        },
-        {
-          name: 'github',
-          displayName: 'GitHub',
-          description: 'Code hosting and collaboration',
-          logoUrl: '',
-          auth: { type: 'API_KEY', required: true },
-          actions: [{ name: 'create_issue', displayName: 'Create Issue' }]
-        },
-        {
-          name: 'discord',
-          displayName: 'Discord',
-          description: 'Voice, video and text communication',
-          logoUrl: '',
-          auth: { type: 'API_KEY', required: true },
-          actions: [{ name: 'send_message', displayName: 'Send Message' }]
-        },
-        {
-          name: 'airtable',
-          displayName: 'Airtable',
-          description: 'Cloud collaboration service',
-          logoUrl: '',
-          auth: { type: 'API_KEY', required: true },
-          actions: [{ name: 'create_record', displayName: 'Create Record' }]
-        }
       ]);
     } catch (error) {
       console.error('Failed to load integrations:', error);
