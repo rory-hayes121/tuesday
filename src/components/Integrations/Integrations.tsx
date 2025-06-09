@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Search, 
-  CheckCircle, 
-  ExternalLink, 
-  Settings, 
-  Trash2,
-  X,
-  Key,
-  TestTube,
+import {
+  Search,
   Zap,
+  Settings,
+  Plus,
+  Trash2,
+  ExternalLink,
+  Check,
+  X,
+  AlertCircle,
   RefreshCw
 } from 'lucide-react';
-import { ActivepiecesService } from '../../services/activepieces';
+// import { ActivepiecesService } from '../../services/activepieces';
 import { Tool } from '../../types';
 
 const Integrations: React.FC = () => {
@@ -25,10 +24,10 @@ const Integrations: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
 
-  const getActivepiecesService = () => {
-    const baseUrl = import.meta.env.VITE_ACTIVEPIECES_URL || 'https://demo.activepieces.com';
-    return new ActivepiecesService({ baseUrl });
-  };
+  // const getActivepiecesService = () => {
+  //   const baseUrl = import.meta.env.VITE_ACTIVEPIECES_URL || 'https://demo.activepieces.com';
+  //   return new ActivepiecesService({ baseUrl });
+  // };
 
   useEffect(() => {
     loadAvailableIntegrations();
@@ -37,14 +36,67 @@ const Integrations: React.FC = () => {
   const loadAvailableIntegrations = async () => {
     try {
       setIsLoading(true);
-      const activepiecesService = getActivepiecesService();
-      const apps = await activepiecesService.getAvailableIntegrations();
-      setAvailableApps(apps);
+      // TODO: Re-enable when ActivepiecesService is fixed
+      // const activepiecesService = getActivepiecesService();
+      // const apps = await activepiecesService.getAvailableIntegrations();
+      // setAvailableApps(apps);
       
       // Mock some connected integrations for demo
       setConnectedIntegrations([
         { id: 'slack', name: 'Slack', icon: 'MessageSquare', connected: true, category: 'communication' },
         { id: 'notion', name: 'Notion', icon: 'FileText', connected: true, category: 'productivity' }
+      ]);
+      
+      // Fallback to mock data for now
+      setAvailableApps([
+        {
+          name: 'slack',
+          displayName: 'Slack',
+          description: 'Team communication and collaboration',
+          logoUrl: '',
+          auth: { type: 'OAUTH2', required: true },
+          actions: [{ name: 'send_message', displayName: 'Send Message' }]
+        },
+        {
+          name: 'notion',
+          displayName: 'Notion',
+          description: 'All-in-one workspace for notes and docs',
+          logoUrl: '',
+          auth: { type: 'API_KEY', required: true },
+          actions: [{ name: 'create_page', displayName: 'Create Page' }]
+        },
+        {
+          name: 'gmail',
+          displayName: 'Gmail',
+          description: 'Email service by Google',
+          logoUrl: '',
+          auth: { type: 'OAUTH2', required: true },
+          actions: [{ name: 'send_email', displayName: 'Send Email' }]
+        },
+        {
+          name: 'github',
+          displayName: 'GitHub',
+          description: 'Code hosting and collaboration',
+          logoUrl: '',
+          auth: { type: 'API_KEY', required: true },
+          actions: [{ name: 'create_issue', displayName: 'Create Issue' }]
+        },
+        {
+          name: 'discord',
+          displayName: 'Discord',
+          description: 'Voice, video and text communication',
+          logoUrl: '',
+          auth: { type: 'API_KEY', required: true },
+          actions: [{ name: 'send_message', displayName: 'Send Message' }]
+        },
+        {
+          name: 'airtable',
+          displayName: 'Airtable',
+          description: 'Cloud collaboration service',
+          logoUrl: '',
+          auth: { type: 'API_KEY', required: true },
+          actions: [{ name: 'create_record', displayName: 'Create Record' }]
+        }
       ]);
     } catch (error) {
       console.error('Failed to load integrations:', error);
@@ -235,7 +287,7 @@ const Integrations: React.FC = () => {
                     <div>
                       <h3 className="font-medium text-gray-900">{integration.name}</h3>
                       <p className="text-sm text-green-600 flex items-center space-x-1">
-                        <CheckCircle className="w-3 h-3" />
+                        <Check className="w-3 h-3" />
                         <span>Connected</span>
                       </p>
                     </div>
@@ -329,7 +381,7 @@ const Integrations: React.FC = () => {
                       </div>
                     </div>
                     {isConnected && (
-                      <CheckCircle className="w-5 h-5 text-green-500" />
+                      <Check className="w-5 h-5 text-green-500" />
                     )}
                   </div>
                   
@@ -399,7 +451,7 @@ const Integrations: React.FC = () => {
                     API Key
                   </label>
                   <div className="relative">
-                    <Key className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
                     <input
                       type="password"
                       value={apiKey}
@@ -425,7 +477,7 @@ const Integrations: React.FC = () => {
                   disabled={isTestingConnection}
                   className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200 flex items-center justify-center space-x-2 disabled:opacity-50"
                 >
-                  <TestTube className="w-4 h-4" />
+                  <Search className="w-4 h-4" />
                   <span>{isTestingConnection ? 'Testing...' : 'Test Connection'}</span>
                 </button>
               )}

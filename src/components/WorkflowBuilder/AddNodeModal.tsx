@@ -12,7 +12,7 @@ import {
   Filter,
   Plus
 } from 'lucide-react';
-import { ActivepiecesService } from '../../services/activepieces';
+// import { ActivepiecesService } from '../../services/activepieces';
 import { BlockTemplate } from '../../types/workflow';
 
 interface AddNodeModalProps {
@@ -41,17 +41,28 @@ const AddNodeModal: React.FC<AddNodeModalProps> = ({
     }
   }, [isOpen]);
 
-  const getActivepiecesService = () => {
-    const baseUrl = import.meta.env.VITE_ACTIVEPIECES_URL || 'https://demo.activepieces.com';
-    return new ActivepiecesService({ baseUrl });
-  };
+  // const getActivepiecesService = () => {
+  //   const baseUrl = import.meta.env.VITE_ACTIVEPIECES_URL || 'https://demo.activepieces.com';
+  //   return new ActivepiecesService({ baseUrl });
+  // };
 
   const loadIntegrations = async () => {
     try {
       setIsLoading(true);
-      const activepiecesService = getActivepiecesService();
-      const apps = await activepiecesService.getAvailableIntegrations();
-      setIntegrations(apps || []);
+      // TODO: Re-enable when ActivepiecesService is fixed
+      // const activepiecesService = getActivepiecesService();
+      // const apps = await activepiecesService.getAvailableIntegrations();
+      // setIntegrations(apps || []);
+      
+      // Use fallback integrations for now
+      setIntegrations([
+        { name: 'slack', displayName: 'Slack', description: 'Team communication' },
+        { name: 'notion', displayName: 'Notion', description: 'All-in-one workspace' },
+        { name: 'gmail', displayName: 'Gmail', description: 'Email service' },
+        { name: 'github', displayName: 'GitHub', description: 'Code hosting' },
+        { name: 'discord', displayName: 'Discord', description: 'Voice and text chat' },
+        { name: 'airtable', displayName: 'Airtable', description: 'Cloud collaboration' }
+      ]);
     } catch (error) {
       console.error('Failed to load integrations:', error);
       // Use fallback integrations
@@ -76,7 +87,7 @@ const AddNodeModal: React.FC<AddNodeModalProps> = ({
         label: 'AI Prompt',
         description: 'Send instructions to AI models like GPT-4',
         icon: 'MessageSquare',
-        category: 'ai',
+        category: 'core',
         color: 'from-blue-500 to-blue-600',
         defaultConfig: {
           instruction: 'Enter your AI instruction here...',
