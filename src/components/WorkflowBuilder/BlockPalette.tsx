@@ -10,10 +10,9 @@ import {
   X,
   Plus
 } from 'lucide-react';
-import { useWorkflowStore } from '../../stores/workflowStore';
 import { BlockTemplate } from '../../types/workflow';
 import { useAuth } from '../../hooks/useAuth';
-import { ActivepiecesService } from '../../services/activepieces';
+// import { activepiecesClient } from '../../services/activepieces';
 
 interface BlockPaletteProps {
   isOpen: boolean;
@@ -24,8 +23,8 @@ const BlockPalette: React.FC<BlockPaletteProps> = ({ isOpen, onClose }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [integrations, setIntegrations] = useState<any[]>([]);
+  const [blockTemplates, setBlockTemplates] = useState<BlockTemplate[]>([]);
   
-  const { blockTemplates, setBlockTemplates } = useWorkflowStore();
   const { workspace } = useAuth();
 
   // Load integrations and build block templates
@@ -34,16 +33,19 @@ const BlockPalette: React.FC<BlockPaletteProps> = ({ isOpen, onClose }) => {
     initializeBlockTemplates();
   }, [workspace?.id]);
 
-  const getActivepiecesService = () => {
-    const baseUrl = import.meta.env.VITE_ACTIVEPIECES_URL || 'https://demo.activepieces.com';
-    return new ActivepiecesService({ baseUrl });
-  };
-
   const loadIntegrations = async () => {
     try {
-      const activepiecesService = getActivepiecesService();
-      const apps = await activepiecesService.getAvailableIntegrations();
-      setIntegrations(apps || []);
+      // TODO: Re-enable when activepieces import is fixed
+      // const apps = await activepiecesClient.listPieces();
+      // setIntegrations(apps || []);
+      
+      // Use fallback integrations for now
+      setIntegrations([
+        { name: 'slack', displayName: 'Slack' },
+        { name: 'notion', displayName: 'Notion' },
+        { name: 'gmail', displayName: 'Gmail' },
+        { name: 'github', displayName: 'GitHub' }
+      ]);
     } catch (error) {
       console.error('Failed to load integrations:', error);
       // Use fallback integrations
