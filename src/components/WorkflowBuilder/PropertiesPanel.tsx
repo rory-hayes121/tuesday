@@ -17,30 +17,43 @@ interface PropertiesPanelProps {
 }
 
 const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ nodeId, onClose }) => {
-  const { getNodeById, updateNodeData, deleteNode } = useWorkflowStore();
+  const { nodes, updateNode, deleteNode } = useWorkflowStore();
   const [hasChanges, setHasChanges] = useState(false);
   
-  const node = nodeId ? getNodeById(nodeId) : null;
+  const node = nodeId ? nodes.find(n => n.id === nodeId) : null;
   
   if (!node) return null;
 
   const handleConfigUpdate = (updates: any) => {
-    updateNodeData(nodeId!, {
-      config: {
-        ...node.data.config,
-        ...updates
+    updateNode(nodeId!, {
+      data: {
+        ...node.data,
+        config: {
+          ...node.data?.config,
+          ...updates
+        }
       }
     });
     setHasChanges(true);
   };
 
   const handleLabelUpdate = (label: string) => {
-    updateNodeData(nodeId!, { label });
+    updateNode(nodeId!, { 
+      data: {
+        ...node.data,
+        label
+      }
+    });
     setHasChanges(true);
   };
 
   const handleDescriptionUpdate = (description: string) => {
-    updateNodeData(nodeId!, { description });
+    updateNode(nodeId!, { 
+      data: {
+        ...node.data,
+        description
+      }
+    });
     setHasChanges(true);
   };
 

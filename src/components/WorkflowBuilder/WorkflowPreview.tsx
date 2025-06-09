@@ -8,7 +8,12 @@ interface WorkflowPreviewProps {
 }
 
 const WorkflowPreview: React.FC<WorkflowPreviewProps> = ({ isOpen, onClose }) => {
-  const { nodes, edges, validationResult } = useWorkflowStore();
+  const { nodes, edges, validationErrors } = useWorkflowStore();
+
+  const isValid = Object.keys(validationErrors).length === 0;
+  const validationErrorsList = Object.entries(validationErrors).flatMap(([nodeId, errors]) => 
+    errors.map(error => ({ nodeId, message: error }))
+  );
 
   const generateWorkflowCode = () => {
     // Generate executable code for the workflow
@@ -99,9 +104,9 @@ const WorkflowPreview: React.FC<WorkflowPreviewProps> = ({ isOpen, onClose }) =>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-500">Status:</span>
                     <span className={`text-sm font-medium ${
-                      validationResult?.isValid ? 'text-green-600' : 'text-red-600'
+                      isValid ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {validationResult?.isValid ? 'Valid' : 'Invalid'}
+                      {isValid ? 'Valid' : 'Invalid'}
                     </span>
                   </div>
                 </div>
@@ -124,13 +129,13 @@ const WorkflowPreview: React.FC<WorkflowPreviewProps> = ({ isOpen, onClose }) =>
                 </div>
               </div>
 
-              {validationResult && !validationResult.isValid && (
+              {validationErrorsList.length > 0 && (
                 <div>
                   <h4 className="text-md font-medium text-red-900 mb-3">Validation Errors</h4>
                   <div className="space-y-2">
-                    {validationResult.errors.map((error, index) => (
+                    {validationErrorsList.map(({ nodeId, message }, index) => (
                       <div key={index} className="p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-                        {error.message}
+                        {message}
                       </div>
                     ))}
                   </div>
