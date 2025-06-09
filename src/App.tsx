@@ -75,18 +75,27 @@ function AppContent() {
 function MainApp() {
   const [activeSection, setActiveSection] = useState('agents'); // Changed default to 'agents'
   const [editingAgent, setEditingAgent] = useState<string | null>(null);
+  const [generatedAgentData, setGeneratedAgentData] = useState<any>(null);
 
-  const handleCreateAgent = (prompt?: string) => {
+  const handleCreateAgent = (prompt?: string, generatedAgent?: any) => {
     setActiveSection('builder');
     setEditingAgent(null);
-    if (prompt) {
-      console.log('Creating agent from prompt:', prompt);
+    
+    if (generatedAgent) {
+      console.log('Creating agent from AI generation:', generatedAgent);
+      setGeneratedAgentData(generatedAgent);
+    } else {
+      setGeneratedAgentData(null);
+      if (prompt) {
+        console.log('Creating agent from prompt:', prompt);
+      }
     }
   };
 
   const handleEditAgent = (agentId: string) => {
     setActiveSection('builder');
     setEditingAgent(agentId);
+    setGeneratedAgentData(null); // Clear any generated data when editing existing agent
   };
 
   const handleSaveAgent = async (workflow: any) => {
@@ -97,6 +106,7 @@ function MainApp() {
       // For now, just log and redirect
       setActiveSection('agents');
       setEditingAgent(null);
+      setGeneratedAgentData(null); // Clear generated data after saving
     } catch (error) {
       console.error('Failed to save agent:', error);
     }
@@ -110,6 +120,7 @@ function MainApp() {
     console.log('Using template:', templateId);
     setActiveSection('builder');
     setEditingAgent(null);
+    setGeneratedAgentData(null);
   };
 
   const renderContent = () => {
@@ -127,6 +138,7 @@ function MainApp() {
         return (
           <AgentBuilder
             agentId={editingAgent}
+            generatedAgent={generatedAgentData}
             onSave={handleSaveAgent}
             onTest={handleTestAgent}
           />

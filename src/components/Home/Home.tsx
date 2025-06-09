@@ -4,26 +4,50 @@ import {
   Sparkles, 
   ArrowRight, 
   MessageSquare, 
-  Zap
+  Zap,
+  AlertCircle
 } from 'lucide-react';
+import { generateAgentFromPrompt } from '../../services/openai';
 
 interface HomeProps {
-  onCreateAgent: (prompt: string) => void;
+  onCreateAgent: (prompt: string, generatedAgent?: any) => void;
 }
 
 const Home: React.FC<HomeProps> = ({ onCreateAgent }) => {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
 
     setIsGenerating(true);
-    // Simulate AI processing time
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    onCreateAgent(prompt);
-    setIsGenerating(false);
+    setError(null);
+
+    try {
+      console.log('Generating agent from prompt:', prompt);
+      
+      // Generate agent using OpenAI
+      const generatedAgent = await generateAgentFromPrompt({
+        prompt: prompt.trim(),
+        context: 'User wants to create an AI agent workflow'
+      });
+
+      console.log('Generated agent:', generatedAgent);
+
+      // Pass the generated agent data to the parent
+      onCreateAgent(prompt, generatedAgent);
+    } catch (err) {
+      console.error('Failed to generate agent:', err);
+      setError(err instanceof Error ? err.message : 'Failed to generate agent. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleTryExample = (examplePrompt: string) => {
+    setPrompt(examplePrompt);
   };
 
   return (
@@ -40,7 +64,7 @@ const Home: React.FC<HomeProps> = ({ onCreateAgent }) => {
             Build Your AI Agent
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Describe what you want your AI agent to do, and we'll create the perfect workflow for you.
+            Describe what you want your AI agent to do, and we'll create the perfect workflow for you using advanced AI.
           </p>
         </div>
 
@@ -62,6 +86,17 @@ const Home: React.FC<HomeProps> = ({ onCreateAgent }) => {
                 />
               </div>
             </div>
+
+            {/* Error Display */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start space-x-3">
+                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-red-800 font-medium">Failed to generate agent</p>
+                  <p className="text-red-600 text-sm mt-1">{error}</p>
+                </div>
+              </div>
+            )}
             
             <button
               type="submit"
@@ -71,12 +106,12 @@ const Home: React.FC<HomeProps> = ({ onCreateAgent }) => {
               {isGenerating ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Creating your agent...</span>
+                  <span>Creating your agent with AI...</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-5 h-5" />
-                  <span>Create Agent</span>
+                  <span>Create Agent with AI</span>
                   <ArrowRight className="w-5 h-5" />
                 </>
               )}
@@ -84,34 +119,59 @@ const Home: React.FC<HomeProps> = ({ onCreateAgent }) => {
           </form>
         </div>
 
+        {/* Example Prompts */}
+        <div className="mb-16">
+          <h3 className="text-xl font-semibold text-gray-900 mb-6 text-center">
+            Need inspiration? Try these examples:
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[
+              "Create a customer support email responder that analyzes sentiment and generates appropriate replies",
+              "Build a content moderator that reviews social media posts and flags inappropriate content",
+              "Make an agent that summarizes long documents and extracts key insights",
+              "Create a lead qualification agent that scores prospects based on their responses",
+              "Build a code reviewer that analyzes pull requests and suggests improvements",
+              "Make a meeting scheduler that finds optimal times for multiple participants"
+            ].map((example, index) => (
+              <button
+                key={index}
+                onClick={() => handleTryExample(example)}
+                className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors text-left text-sm text-gray-700 hover:text-blue-700"
+              >
+                {example}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Features */}
-        <div className="mt-16 text-center">
+        <div className="text-center">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="space-y-3">
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto">
                 <Zap className="w-6 h-6 text-blue-600" />
               </div>
-              <h3 className="font-semibold text-gray-900">No-Code Builder</h3>
+              <h3 className="font-semibold text-gray-900">AI-Generated Workflows</h3>
               <p className="text-sm text-gray-600">
-                Create powerful AI workflows without writing a single line of code
+                Our AI understands your requirements and builds the perfect workflow automatically
               </p>
             </div>
             <div className="space-y-3">
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto">
                 <Bot className="w-6 h-6 text-purple-600" />
               </div>
-              <h3 className="font-semibold text-gray-900">AI-Powered</h3>
+              <h3 className="font-semibold text-gray-900">Smart Block Selection</h3>
               <p className="text-sm text-gray-600">
-                Leverage advanced AI models to automate complex business processes
+                Advanced AI chooses the right combination of blocks for your specific use case
               </p>
             </div>
             <div className="space-y-3">
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto">
                 <MessageSquare className="w-6 h-6 text-green-600" />
               </div>
-              <h3 className="font-semibold text-gray-900">Easy Integration</h3>
+              <h3 className="font-semibold text-gray-900">Instant Customization</h3>
               <p className="text-sm text-gray-600">
-                Connect with your favorite tools like Slack, Notion, and more
+                Generated workflows are fully editable - tweak and customize as needed
               </p>
             </div>
           </div>
