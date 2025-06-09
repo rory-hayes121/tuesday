@@ -1,8 +1,7 @@
-import React, { useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useRef, useEffect, useState } from 'react';
 import ReactFlow, {
   Background,
   Controls,
-  MiniMap,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -27,6 +26,7 @@ import ToolNode from './nodes/ToolNode';
 import LogicNode from './nodes/LogicNode';
 import MemoryNode from './nodes/MemoryNode';
 import IntegrationNode from './nodes/IntegrationNode';
+import AddNodeModal from './AddNodeModal';
 
 // Custom node types
 const nodeTypes = {
@@ -48,6 +48,9 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 }) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = React.useState<ReactFlowInstance | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addPosition, setAddPosition] = useState<{ x: number; y: number } | null>(null);
+  const [sourceNodeId, setSourceNodeId] = useState<string | null>(null);
   
   const {
     nodes: storeNodes,
@@ -80,11 +83,16 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 
   // Sync store state with ReactFlow state
   useEffect(() => {
-    const reactFlowNodes: Node[] = storeNodes.map(node => ({
+    const reactFlowNodes: Node[] = storeNodes.map((node, index) => ({
       id: node.id,
       type: node.type,
       position: node.position,
-      data: node.data,
+      data: {
+        ...node.data,
+        onAddNode: (sourceId: string) => handleAddNodeClick(sourceId),
+        isLast: index === storeNodes.length - 1,
+        hasOutgoing: storeEdges.some(edge => edge.source === node.id)
+      },
       selected: selectedNodes.includes(node.id),
       draggable: true,
       selectable: true,
@@ -97,16 +105,102 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
       target: edge.target,
       sourceHandle: edge.sourceHandle,
       targetHandle: edge.targetHandle,
-      type: edge.type || 'smoothstep',
-      animated: edge.animated || false,
+      type: 'smoothstep',
+      animated: false,
       selected: selectedEdges.includes(edge.id),
-      style: edge.style || { stroke: '#94a3b8', strokeWidth: 2 },
+      style: { 
+        stroke: '#94a3b8', 
+        strokeWidth: 2,
+        strokeDasharray: '5,5'
+      },
       deletable: true
     }));
 
     setNodes(reactFlowNodes);
     setEdges(reactFlowEdges);
   }, [storeNodes, storeEdges, selectedNodes, selectedEdges, setNodes, setEdges]);
+
+  // Auto-layout nodes vertically
+  useEffect(() => {
+    if (storeNodes.length > 0) {
+      const updatedNodes = storeNodes.map((node, index) => ({
+        ...node,
+        position: {
+          x: 400, // Center horizontally
+          y: index * 200 + 100 // Vertical spacing
+        }
+      }));
+
+      // Only update if positions have changed
+      const hasPositionChanges = updatedNodes.some((node, index) => 
+        storeNodes[index].position.x !== node.position.x || 
+        storeNodes[index].position.y !== node.position.y
+      );
+
+      if (hasPositionChanges) {
+        updatedNodes.forEach((node, index) => {
+          updateNode(storeNodes[index].id, { position: node.position });
+        });
+      }
+    }
+  }, [storeNodes.length]);
+
+  const handleAddNodeClick = (sourceId?: string) => {
+    const sourceNode = storeNodes.find(n => n.id === sourceId);
+    if (sourceNode) {
+      setAddPosition({
+        x: sourceNode.position.x,
+        y: sourceNode.position.y + 200
+      });
+      setSourceNodeId(sourceId || null);
+    } else {
+      // Add first node
+      setAddPosition({ x: 400, y: 100 });
+      setSourceNodeId(null);
+    }
+    setShowAddModal(true);
+  };
+
+  const handleAddNode = (template: any) => {
+    if (!addPosition) return;
+
+    const newNode: WorkflowNode = {
+      id: `${template.type}-${Date.now()}`,
+      type: template.type as WorkflowNode['type'],
+      position: addPosition,
+      data: {
+        label: template.label || `${template.type} Node`,
+        description: template.description || '',
+        config: template.defaultConfig || {},
+        inputs: template.defaultHandles?.inputs || [],
+        outputs: template.defaultHandles?.outputs || [],
+        integrationId: template.integrationId,
+        isValid: true,
+        errors: []
+      }
+    };
+
+    addNode(newNode);
+
+    // Create connection if there's a source node
+    if (sourceNodeId) {
+      const newEdge: WorkflowEdge = {
+        id: `edge-${sourceNodeId}-${newNode.id}-${Date.now()}`,
+        source: sourceNodeId,
+        target: newNode.id,
+        type: 'smoothstep',
+        animated: false
+      };
+      addStoreEdge(newEdge);
+    }
+
+    selectNode(newNode.id);
+    onNodeSelect?.(newNode.id);
+    saveToHistory(`Add ${template.type} node`);
+    setShowAddModal(false);
+    setAddPosition(null);
+    setSourceNodeId(null);
+  };
 
   // Handle node changes from ReactFlow
   const handleNodesChange: OnNodesChange = useCallback((changes: NodeChange[]) => {
@@ -121,7 +215,6 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
             const storeNode = storeNodes.find(n => n.id === change.id);
             if (storeNode) {
               const snappedPosition = snapToGrid(change.position);
-              // Update the store node position
               updateNode(change.id, { position: snappedPosition });
               saveToHistory(`Move node ${change.id}`);
             }
@@ -338,26 +431,42 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           showFitView={true}
           showInteractive={true}
         />
-        <MiniMap 
-          position="bottom-left"
-          nodeColor={(node) => {
-            switch (node.type) {
-              case 'prompt': return '#3b82f6';
-              case 'tool': return '#10b981';
-              case 'logic': return '#8b5cf6';
-              case 'memory': return '#f59e0b';
-              case 'integration': return '#ef4444';
-              default: return '#6b7280';
-            }
-          }}
-          maskColor="rgba(0, 0, 0, 0.1)"
-          style={{
-            backgroundColor: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            borderRadius: '8px'
-          }}
-        />
       </ReactFlow>
+
+      {/* Empty State */}
+      {storeNodes.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="text-center">
+            <div className="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center mb-6 mx-auto">
+              <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-medium text-gray-900 mb-3">Start Building Your Workflow</h3>
+            <p className="text-gray-600 max-w-md mb-6">
+              Click the button below to add your first step and start creating your automation workflow.
+            </p>
+            <button
+              onClick={() => handleAddNodeClick()}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl pointer-events-auto"
+            >
+              Add First Step
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add Node Modal */}
+      <AddNodeModal
+        isOpen={showAddModal}
+        onClose={() => {
+          setShowAddModal(false);
+          setAddPosition(null);
+          setSourceNodeId(null);
+        }}
+        onAddNode={handleAddNode}
+        position={addPosition}
+      />
     </div>
   );
 };

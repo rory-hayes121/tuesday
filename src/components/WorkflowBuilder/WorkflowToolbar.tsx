@@ -9,7 +9,8 @@ import {
   CheckCircle,
   AlertTriangle,
   Eye,
-  Settings
+  Settings,
+  Plus
 } from 'lucide-react';
 import { useWorkflowStore } from '../../stores/workflowStore';
 
@@ -17,6 +18,7 @@ interface WorkflowToolbarProps {
   onSave: () => void;
   onTest: () => void;
   onPreview: () => void;
+  onAddNode?: () => void;
   isTestMode?: boolean;
   isSaving?: boolean;
 }
@@ -25,6 +27,7 @@ const WorkflowToolbar: React.FC<WorkflowToolbarProps> = ({
   onSave,
   onTest,
   onPreview,
+  onAddNode,
   isTestMode = false,
   isSaving = false
 }) => {
@@ -118,6 +121,17 @@ const WorkflowToolbar: React.FC<WorkflowToolbarProps> = ({
           >
             <RotateCcw className="w-4 h-4" />
           </button>
+
+          {/* Add Node */}
+          {onAddNode && (
+            <button
+              onClick={onAddNode}
+              className="px-4 py-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors duration-200 flex items-center space-x-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Step</span>
+            </button>
+          )}
         </div>
 
         {/* Right side - Status and validation */}

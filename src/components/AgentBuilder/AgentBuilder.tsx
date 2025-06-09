@@ -22,6 +22,7 @@ import WorkflowToolbar from '../WorkflowBuilder/WorkflowToolbar';
 import TestRunner from '../WorkflowBuilder/TestRunner';
 import WorkflowPreview from '../WorkflowBuilder/WorkflowPreview';
 import ActivepiecesDeployment from '../WorkflowBuilder/ActivepiecesDeployment';
+import AddNodeModal from '../WorkflowBuilder/AddNodeModal';
 
 interface AgentBuilderProps {
   agentId?: string | null;
@@ -40,6 +41,7 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, onSave, onTest }) 
   const [showTestRunner, setShowTestRunner] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showActivepiecesDeploy, setShowActivepiecesDeploy] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const { user, workspace } = useAuth();
   const { 
@@ -199,6 +201,10 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, onSave, onTest }) 
     setSelectedNodeId(null);
   }, [clearSelection]);
 
+  const handleAddNode = useCallback(() => {
+    setShowAddModal(true);
+  }, []);
+
   if (isLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
@@ -256,6 +262,7 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, onSave, onTest }) 
         onSave={handleSave}
         onTest={handleTest}
         onPreview={handlePreview}
+        onAddNode={handleAddNode}
         isTestMode={isTestMode}
         isSaving={isSaving}
       />
@@ -273,16 +280,6 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, onSave, onTest }) 
             onNodeSelect={handleNodeSelect}
             onCanvasClick={handleCanvasClick}
           />
-
-          {/* Add Block Button */}
-          <button
-            onClick={() => setShowPalette(!showPalette)}
-            className={`absolute bottom-6 left-6 w-14 h-14 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center justify-center z-10 ${
-              showPalette ? 'rotate-45' : ''
-            }`}
-          >
-            <Plus className="w-6 h-6" />
-          </button>
         </div>
 
         {/* Properties Panel */}
@@ -310,6 +307,46 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, onSave, onTest }) 
         onClose={() => setShowActivepiecesDeploy(false)}
         agentId={agentId || 'new'}
         agentName={agentName}
+      />
+
+      <AddNodeModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAddNode={(template) => {
+          const newNode = {
+            id: `${template.type}-${Date.now()}`,
+            type: template.type,
+            position: { x: 400, y: nodes.length * 200 + 100 },
+            data: {
+              label: template.label,
+              description: template.description,
+              config: template.defaultConfig,
+              inputs: template.defaultHandles?.inputs || [],
+              outputs: template.defaultHandles?.outputs || [],
+              integrationId: template.integrationId,
+              isValid: true,
+              errors: []
+            }
+          };
+          
+          addNode(newNode);
+          
+          // If there are existing nodes, connect to the last one
+          if (nodes.length > 0) {
+            const lastNode = nodes[nodes.length - 1];
+            const newEdge = {
+              id: `edge-${lastNode.id}-${newNode.id}-${Date.now()}`,
+              source: lastNode.id,
+              target: newNode.id,
+              type: 'smoothstep',
+              animated: false
+            };
+            addStoreEdge(newEdge);
+          }
+          
+          setShowAddModal(false);
+        }}
+        position={null}
       />
     </div>
   );
