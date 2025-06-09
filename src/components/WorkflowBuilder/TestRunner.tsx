@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Play, Square, RotateCcw, Download, X } from 'lucide-react';
 import { useWorkflowStore } from '../../stores/workflowStore';
-import { ActivepiecesService } from '../../services/activepieces';
+// import { ActivepiecesService } from '../../services/activepieces';
 
 interface TestRunnerProps {
   isOpen: boolean;
@@ -22,34 +22,36 @@ const TestRunner: React.FC<TestRunnerProps> = ({ isOpen, onClose }) => {
     try {
       const input = JSON.parse(testInput);
       
+      // TODO: Re-enable when ActivepiecesService is fixed
       // Create a test execution using Activepieces service
-      const activepiecesService = new ActivepiecesService({
-        baseUrl: 'https://activepieces-production-aa7c.up.railway.app'
-      });
+      // const activepiecesService = new ActivepiecesService({
+      //   baseUrl: 'https://activepieces-production-aa7c.up.railway.app'
+      // });
 
       // Generate preview to validate workflow
-      const preview = activepiecesService.generatePreview(nodes, edges);
+      // const preview = activepiecesService.generatePreview(nodes, edges);
       
-      if (preview.errors.length > 0) {
+      // Basic validation for now
+      if (!nodes || nodes.length === 0) {
         setExecution({
           id: 'test-failed',
           status: 'failed',
           startedAt: new Date().toISOString(),
           completedAt: new Date().toISOString(),
           input: input,
-          error: preview.errors.join(', '),
+          error: 'No nodes found in workflow',
           steps: []
         });
         return;
       }
 
       // Simulate execution for testing
-      const mockExecution = {
+      const mockExecution: any = {
         id: `test-${Date.now()}`,
         status: 'running',
         startedAt: new Date().toISOString(),
         input: input,
-        steps: []
+        steps: [] as any[]
       };
 
       setExecution(mockExecution);
@@ -57,7 +59,7 @@ const TestRunner: React.FC<TestRunnerProps> = ({ isOpen, onClose }) => {
       // Simulate step execution
       for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
-        const step = {
+        const step: any = {
           nodeId: node.id,
           status: 'running',
           startedAt: new Date().toISOString(),
