@@ -1,0 +1,100 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# 🚧 Objective
+We are replacing all legacy Windmill integration logic across the frontend, backend, and execution layer with a clean integration based on Activepieces. This includes:
+- Removing any Windmill-specific code
+- Adapting the workflow builder to produce Activepieces-compatible flows
+- Connecting the execution engine to trigger and monitor Activepieces workflows
+- Pulling in all available Activepieces integrations dynamically
+- Ensuring that users can configure, run, and debug these workflows via our builder UI
+
+---
+
+# ✅ Tasks
+
+## 1. Remove All Windmill Code
+**Frontend**
+- Delete all references to `windmillClient`, `windmillAuth`, or Windmill APIs
+- Remove any Windmill-specific templates, node types, or utilities
+- Replace any Windmill-specific node schemas or types in the visual builder (ReactFlow config, Zustand store, etc.)
+
+**Backend**
+- Remove API routes or services related to Windmill job submission, template fetching, etc.
+- Remove any Windmill-related credentials, secret injection, or token handling
+
+## 2. Integrate Activepieces
+**App Infrastructure**
+- Set up Activepieces backend instance and expose the necessary REST API or SDK access to your app
+- Connect to the Activepieces API from the backend (via server-side calls or proxies if needed)
+
+**Integration Catalog**
+- Fetch the full catalog of available integrations (over 100) from Activepieces
+- Store and cache them with metadata (name, category, logo, auth type, available actions/triggers)
+- Use these to dynamically populate the “Add Step” modal in the visual builder
+
+**Credential Manager**
+- Modify the `/integrations` page to support Activepieces-compatible credential creation and validation
+- Store credentials securely per workspace, and tag them to apps/services
+
+## 3. Update the Workflow Builder
+**Node Types**
+- Replace deprecated Windmill-based “Tool” or “Integration” nodes with Activepieces-powered equivalents
+- Update `IntegrationNode`, `ToolNode`, and other blocks to use:
+  - Selected app from Activepieces catalog
+  - Action type (trigger/action)
+  - Config schema from Activepieces app definition
+  - Credential linkage from workspace store
+
+**Step Configuration**
+- Dynamically pull config schema per selected app/action
+- Auto-generate form fields using the schema (e.g., dropdowns, inputs, required flags)
+
+**Node Execution Preview**
+- Use the Activepieces “test run” endpoint to simulate steps when a node is selected
+- Capture inputs/outputs and show them in the right-hand debug panel
+
+**Zustand Store**
+- Update state structure to reflect Activepieces-compatible node config format
+- Normalize structure so it matches Activepieces flow JSON when exporting
+
+## 4. Connect Execution Engine
+**Triggering Workflows**
+- On user action (manual run), serialize the visual workflow into Activepieces-compatible JSON
+- Send it to Activepieces’ execution endpoint (use a `/run-agent` API route on our server to proxy it)
+- Store the execution metadata (status, logs, outputs) in Supabase
+
+**Debugging + Logs**
+- Update `/logs` tab to show:
+  - Workflow name
+  - Triggered by (user/timer/event)
+  - Execution status (success, failure)
+  - Output (JSON preview)
+  - Timestamp
+
+**Run Modes**
+- Add support for:
+  - Manual run (from builder)
+  - Scheduled run (using cron-like triggers)
+  - Event-based (e.g. webhook trigger nodes in Activepieces)
+
+---
+
+# 📦 Expected Output
+
+- Windmill code completely removed from codebase
+- Activepieces fully powering workflow execution, builder steps, and integrations
+- Builder UX updated to use Activepieces blocks and config schemas
+- Execution logs stored and viewable per agent run
+- `/integrations` page updated with credential manager that connects to Activepieces
+- Users can create workflows, select apps, configure steps, and run/test/debug fully
+
+---
+
+# 📘 References
+
+- [Activepieces Docs](https://www.activepieces.com/docs)
+- [Activepieces API Reference](https://www.activepieces.com/docs/api/)
+- [Visual Builder Architecture](from current repo: Zustand, ReactFlow)

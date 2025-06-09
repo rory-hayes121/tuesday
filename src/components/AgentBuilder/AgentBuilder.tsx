@@ -35,7 +35,6 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
   const [agentName, setAgentName] = useState('Untitled Agent');
   const [agentDescription, setAgentDescription] = useState('');
   const [showPalette, setShowPalette] = useState(false);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isTestMode, setIsTestMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -48,11 +47,15 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
   const { 
     nodes, 
     edges, 
-    validationResult,
-    validateWorkflow,
-    clearSelection,
+    selectedNodeId,
+    validationErrors,
+    isValidating,
     setNodes,
-    setEdges
+    setEdges,
+    addNode,
+    selectNode,
+    validateWorkflow,
+    onConnect
   } = useWorkflowStore();
 
   // Load existing agent if editing, or load generated agent data
@@ -171,8 +174,8 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
           throw error;
         }
 
-        // Update the workflow with the new agent ID
-        workflow.id = data.id;
+        // Update the workflow reference
+        console.log('Agent saved with ID:', data.id);
       }
 
       onSave(workflow);
@@ -186,14 +189,16 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
 
   const handleTest = useCallback(async () => {
     // Validate workflow before testing
-    const validation = validateWorkflow();
-    if (!validation.isValid) {
+    validateWorkflow();
+    
+    // Check validation errors
+    if (Object.keys(validationErrors).length > 0) {
       alert('Please fix validation errors before testing');
       return;
     }
 
     setShowTestRunner(true);
-  }, [validateWorkflow]);
+  }, [validateWorkflow, validationErrors]);
 
   const handlePreview = useCallback(() => {
     setShowPreview(true);
@@ -201,8 +206,10 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
 
   const handleActivepiecesDeploy = useCallback(() => {
     // Validate workflow before deployment
-    const validation = validateWorkflow();
-    if (!validation.isValid) {
+    validateWorkflow();
+    
+    // Check validation errors
+    if (Object.keys(validationErrors).length > 0) {
       alert('Please fix validation errors before deploying');
       return;
     }
@@ -213,16 +220,15 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
     }
 
     setShowActivepiecesDeploy(true);
-  }, [validateWorkflow, agentId]);
+  }, [validateWorkflow, validationErrors, agentId]);
 
   const handleNodeSelect = useCallback((nodeId: string | null) => {
-    setSelectedNodeId(nodeId);
-  }, []);
+    selectNode(nodeId);
+  }, [selectNode]);
 
   const handleCanvasClick = useCallback(() => {
-    clearSelection();
-    setSelectedNodeId(null);
-  }, [clearSelection]);
+    selectNode(null);
+  }, [selectNode]);
 
   const handleAddNode = useCallback(() => {
     setShowAddModal(true);
@@ -299,17 +305,14 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
 
         {/* Main Canvas */}
         <div className="flex-1 relative">
-          <WorkflowCanvas
-            onNodeSelect={handleNodeSelect}
-            onCanvasClick={handleCanvasClick}
-          />
+          <WorkflowCanvas />
         </div>
 
         {/* Properties Panel */}
         {selectedNodeId && (
           <PropertiesPanel
             nodeId={selectedNodeId}
-            onClose={() => setSelectedNodeId(null)}
+            onClose={() => selectNode(null)}
           />
         )}
       </div>
@@ -336,8 +339,9 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         onAddNode={(template) => {
+          const nodeId = `${template.type}-${Date.now()}`;
           const newNode = {
-            id: `${template.type}-${Date.now()}`,
+            id: nodeId,
             type: template.type,
             position: { x: 400, y: nodes.length * 200 + 100 },
             data: {
@@ -358,13 +362,16 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
           if (nodes.length > 0) {
             const lastNode = nodes[nodes.length - 1];
             const newEdge = {
-              id: `edge-${lastNode.id}-${newNode.id}-${Date.now()}`,
+              id: `edge-${lastNode.id}-${nodeId}-${Date.now()}`,
               source: lastNode.id,
-              target: newNode.id,
-              type: 'smoothstep',
-              animated: false
+              target: nodeId,
+              sourceHandle: undefined,
+              targetHandle: undefined,
+              type: 'default' as const
             };
-            addStoreEdge(newEdge);
+            
+            // Add edge manually to the edges array
+            setEdges([...edges, newEdge]);
           }
           
           setShowAddModal(false);
