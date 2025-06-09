@@ -1,9 +1,15 @@
 import OpenAI from 'openai';
 import { AgentBlock } from '../types';
 
-// Initialize OpenAI with environment variable or fallback key
+// Initialize OpenAI with environment variable
+const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+
+if (!apiKey) {
+  console.error('OpenAI API key not found. Please set VITE_OPENAI_API_KEY in your environment variables.');
+}
+
 const openai = new OpenAI({
-  apiKey: import.meta.env.VITE_OPENAI_API_KEY || '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',
+  apiKey: apiKey || '',
   dangerouslyAllowBrowser: true // Enable for client-side usage
 });
 
@@ -86,6 +92,11 @@ const AVAILABLE_BLOCKS = {
 
 export async function generateAgentFromPrompt(request: AgentGenerationRequest): Promise<AgentGenerationResponse> {
   try {
+    // Check if API key is configured
+    if (!apiKey) {
+      throw new Error('OpenAI API key is not configured. Please set the VITE_OPENAI_API_KEY environment variable.');
+    }
+
     const systemPrompt = `You are an AI agent workflow designer. Your task is to convert user prompts into structured agent workflows.
 
 Available block types:
