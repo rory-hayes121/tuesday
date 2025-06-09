@@ -75,35 +75,38 @@ class ActivepiecesClient {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}/v1${endpoint}`;
     
-    // For self-hosted instances, we might not need Authorization header
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string> || {}),
     };
 
-    // Only add Authorization header if we have an API key
+    // Add API key if available
     if (this.apiKey) {
       headers['Authorization'] = `Bearer ${this.apiKey}`;
     }
 
-    console.log('Making request to:', url, { method: options.method || 'GET' });
-    
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...headers,
-        ...options.headers,
-      },
-    });
+    console.log('Making request to:', url, { endpoint, hasApiKey: !!this.apiKey });
 
-    console.log('Response status:', response.status);
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Activepieces API error:', response.status, errorText);
-      throw new Error(`Activepieces API error (${response.status}): ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      // Handle CORS errors specifically
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        console.warn('CORS or network error detected. This is likely due to CORS configuration on the Activepieces instance.');
+        throw new Error('CORS_ERROR: Unable to connect to Activepieces instance. Please configure CORS headers on your Railway deployment.');
+      }
+      throw error;
     }
-
-    return response.json() as Promise<T>;
   }
 
   // Credential Management

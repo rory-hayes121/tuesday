@@ -4,6 +4,13 @@
 
 [build.environment]
   NODE_VERSION = "18"
+  
+  # Default Activepieces configuration
+  VITE_ACTIVEPIECES_URL = "https://activepieces-production-aa7c.up.railway.app"
+  VITE_ACTIVEPIECES_PROJECT_ID = "C8NIVPDXRrRamepemIuFV"
+  
+  # Optional: Add your API key if you have one
+  # VITE_ACTIVEPIECES_API_KEY = ""
 
 # SPA redirect - serve index.html for all routes
 [[redirects]]
