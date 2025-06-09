@@ -30,7 +30,7 @@ const ActivepiecesDeployment: React.FC<ActivepiecesDeploymentProps> = ({
   const [isDeploying, setIsDeploying] = useState(false);
   const [deploymentResult, setDeploymentResult] = useState<any>(null);
   const [activepiecesConfig, setActivepiecesConfig] = useState({
-    baseUrl: 'https://activepieces-production-aa7c.up.railway.app',
+    baseUrl: import.meta.env.VITE_ACTIVEPIECES_URL || 'https://demo.activepieces.com',
     projectId: 'default-project'
   });
   const [showPreview, setShowPreview] = useState(false);
@@ -191,7 +191,7 @@ const ActivepiecesDeployment: React.FC<ActivepiecesDeploymentProps> = ({
                       value={activepiecesConfig.baseUrl}
                       onChange={(e) => setActivepiecesConfig(prev => ({ ...prev, baseUrl: e.target.value }))}
                       className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="https://activepieces-production-aa7c.up.railway.app"
+                      placeholder="https://demo.activepieces.com"
                     />
                   </div>
 

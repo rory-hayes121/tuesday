@@ -34,12 +34,14 @@ const BlockPalette: React.FC<BlockPaletteProps> = ({ isOpen, onClose }) => {
     initializeBlockTemplates();
   }, [workspace?.id]);
 
+  const getActivepiecesService = () => {
+    const baseUrl = import.meta.env.VITE_ACTIVEPIECES_URL || 'https://demo.activepieces.com';
+    return new ActivepiecesService({ baseUrl });
+  };
+
   const loadIntegrations = async () => {
     try {
-      const activepiecesService = new ActivepiecesService({
-        baseUrl: 'https://activepieces-production-aa7c.up.railway.app'
-      });
-      
+      const activepiecesService = getActivepiecesService();
       const apps = await activepiecesService.getAvailableIntegrations();
       setIntegrations(apps || []);
     } catch (error) {

@@ -25,9 +25,10 @@ const Integrations: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
 
-  const activepiecesService = new ActivepiecesService({
-    baseUrl: 'https://activepieces-production-aa7c.up.railway.app'
-  });
+  const getActivepiecesService = () => {
+    const baseUrl = import.meta.env.VITE_ACTIVEPIECES_URL || 'https://demo.activepieces.com';
+    return new ActivepiecesService({ baseUrl });
+  };
 
   useEffect(() => {
     loadAvailableIntegrations();
@@ -36,6 +37,7 @@ const Integrations: React.FC = () => {
   const loadAvailableIntegrations = async () => {
     try {
       setIsLoading(true);
+      const activepiecesService = getActivepiecesService();
       const apps = await activepiecesService.getAvailableIntegrations();
       setAvailableApps(apps);
       
