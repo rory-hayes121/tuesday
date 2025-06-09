@@ -19,14 +19,19 @@
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
 
 # Cache static assets
 [[headers]]
   for = "/assets/*"
   [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
+    Cache-Control = "public, max-age=31536000"
 
-# Environment variables template (you'll need to set these in Netlify dashboard)
-# VITE_SUPABASE_URL = "your_supabase_project_url"
-# VITE_SUPABASE_ANON_KEY = "your_supabase_anon_key"
-# VITE_OPENAI_API_KEY = "your_openai_api_key" 
+# Environment variables needed for deployment:
+# VITE_SUPABASE_URL=your_supabase_url
+# VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+# VITE_OPENAI_API_KEY=your_openai_api_key
+# 
+# Activepieces (Self-hosted on Railway):
+# VITE_ACTIVEPIECES_PROJECT_ID=C8NIVPDXRrRamepemIuFV (already set as default)
+# VITE_ACTIVEPIECES_API_KEY=optional_for_self_hosted (if authentication is required) 

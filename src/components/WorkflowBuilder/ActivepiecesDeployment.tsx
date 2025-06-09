@@ -1,453 +1,314 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Upload, 
   Play, 
-  Settings, 
-  AlertCircle, 
+  Loader, 
   CheckCircle, 
+  XCircle,
   ExternalLink,
-  Code,
-  Download,
-  X,
-  Activity
+  Activity,
+  Clock,
+  Zap
 } from 'lucide-react';
-import { useWorkflowStore } from '../../stores/workflowStore';
-import { ActivepiecesService } from '../../services/activepieces';
+import { activepiecesClient, ActivepiecesFlow, ActivepiecesRun } from '../../services/activepieces';
 
 interface ActivepiecesDeploymentProps {
-  isOpen: boolean;
-  onClose: () => void;
   agentId: string;
-  agentName: string;
+  flowId?: string;
+  onDeploy: () => Promise<void>;
+  onClose: () => void;
 }
 
 const ActivepiecesDeployment: React.FC<ActivepiecesDeploymentProps> = ({
-  isOpen,
-  onClose,
   agentId,
-  agentName
+  flowId,
+  onDeploy,
+  onClose
 }) => {
   const [isDeploying, setIsDeploying] = useState(false);
-  const [deploymentResult, setDeploymentResult] = useState<any>(null);
-  const [activepiecesConfig, setActivepiecesConfig] = useState({
-    baseUrl: import.meta.env.VITE_ACTIVEPIECES_URL || 'https://demo.activepieces.com',
-    projectId: 'default-project'
-  });
-  const [showPreview, setShowPreview] = useState(false);
-  const [previewData, setPreviewData] = useState<any>(null);
+  const [flow, setFlow] = useState<ActivepiecesFlow | null>(null);
+  const [runs, setRuns] = useState<ActivepiecesRun[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [testInput, setTestInput] = useState('{}');
-  const [testResult, setTestResult] = useState<any>(null);
-  const [isTesting, setIsTesting] = useState(false);
 
-  const { nodes, edges } = useWorkflowStore();
+  // Load flow details if flowId exists
+  useEffect(() => {
+    if (flowId) {
+      loadFlowDetails();
+    }
+  }, [flowId]);
+
+  const loadFlowDetails = async () => {
+    if (!flowId) return;
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const [flowData, runsData] = await Promise.all([
+        activepiecesClient.getFlow(flowId),
+        activepiecesClient.listRuns(flowId, undefined, 10)
+      ]);
+      
+      setFlow(flowData);
+      setRuns(runsData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load flow details');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleDeploy = async () => {
-    if (!activepiecesConfig.projectId) {
-      alert('Please configure Activepieces project settings');
-      return;
-    }
-
-    setIsDeploying(true);
-    setDeploymentResult(null);
-
     try {
-      const activepiecesService = new ActivepiecesService({
-        baseUrl: activepiecesConfig.baseUrl
-      });
-      
-      const result = await activepiecesService.deployAgent(
-        agentId, 
-        agentName, 
-        nodes, 
-        edges,
-        activepiecesConfig.projectId
-      );
-      
-      setDeploymentResult(result);
-    } catch (error) {
-      setDeploymentResult({
-        errors: [`Deployment failed: ${error}`]
-      });
+      setIsDeploying(true);
+      setError(null);
+      await onDeploy();
+      // Reload flow details after deployment
+      setTimeout(loadFlowDetails, 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Deployment failed');
     } finally {
       setIsDeploying(false);
     }
   };
 
-  const handlePreview = () => {
+  const handleTestRun = async () => {
+    if (!flowId) return;
+    
     try {
-      const activepiecesService = new ActivepiecesService({
-        baseUrl: 'preview'
-      });
+      setIsLoading(true);
+      setError(null);
       
-      const preview = activepiecesService.generatePreview(nodes, edges);
-      setPreviewData(preview);
-      setShowPreview(true);
-    } catch (error) {
-      alert(`Preview generation failed: ${error}`);
-    }
-  };
-
-  const handleTest = async () => {
-    if (!deploymentResult?.deployment?.flowId) {
-      alert('Please deploy the workflow first');
-      return;
-    }
-
-    setIsTesting(true);
-    setTestResult(null);
-
-    try {
-      const input = JSON.parse(testInput);
-      const activepiecesService = new ActivepiecesService({
-        baseUrl: activepiecesConfig.baseUrl
-      });
-
-      const result = await activepiecesService.triggerWorkflow(
-        deploymentResult.deployment.flowId,
-        activepiecesConfig.projectId,
-        input
-      );
-
-      setTestResult(result);
-
-      // Poll for completion
-      if (result.success && result.runId) {
-        const pollInterval = setInterval(async () => {
-          try {
-            const status = await activepiecesService.getExecutionStatus(result.runId!);
-            if (status.status !== 'RUNNING') {
-              clearInterval(pollInterval);
-              const finalResult = await activepiecesService.getExecutionResult(result.runId!);
-              setTestResult(finalResult);
-            }
-          } catch (error) {
-            clearInterval(pollInterval);
-            console.error('Failed to poll execution status:', error);
-          }
-        }, 2000);
-
-        // Stop polling after 30 seconds
-        setTimeout(() => clearInterval(pollInterval), 30000);
+      let input = {};
+      try {
+        input = JSON.parse(testInput);
+      } catch {
+        input = { message: testInput };
       }
-    } catch (error) {
-      setTestResult({
-        success: false,
-        error: `Test execution failed: ${error}`
-      });
+      
+      const run = await activepiecesClient.executeFlow(flowId, input);
+      
+      // Refresh runs list
+      setTimeout(loadFlowDetails, 2000);
+      
+      alert(`Test run started! Run ID: ${run.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Test run failed');
     } finally {
-      setIsTesting(false);
+      setIsLoading(false);
     }
   };
 
-  const handleDownloadFlow = () => {
-    if (!previewData?.flowVersion) return;
-
-    const blob = new Blob([JSON.stringify(previewData.flowVersion, null, 2)], { 
-      type: 'application/json' 
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${agentName}_activepieces_flow.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString();
   };
 
-  if (!isOpen) return null;
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'RUNNING': return 'text-blue-600';
+      case 'SUCCEEDED': return 'text-green-600';
+      case 'FAILED': return 'text-red-600';
+      case 'STOPPED': return 'text-gray-600';
+      default: return 'text-gray-600';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'RUNNING': return <Loader className="w-4 h-4 animate-spin" />;
+      case 'SUCCEEDED': return <CheckCircle className="w-4 h-4" />;
+      case 'FAILED': return <XCircle className="w-4 h-4" />;
+      case 'STOPPED': return <Clock className="w-4 h-4" />;
+      default: return <Activity className="w-4 h-4" />;
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl w-full max-w-4xl h-[80vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">Deploy to Activepieces</h2>
-              <p className="text-gray-600">Convert your workflow to executable Activepieces flow</p>
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+              <Zap className="w-5 h-5 text-white" />
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors duration-200"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Activepieces Deployment</h2>
+              <p className="text-sm text-gray-500">Deploy and manage your workflow</p>
+            </div>
           </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            ×
+          </button>
         </div>
 
-        <div className="flex-1 flex">
-          {/* Left Panel - Configuration */}
-          <div className="w-1/3 border-r border-gray-200 p-6">
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Activepieces Configuration</h3>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Activepieces URL
-                    </label>
-                    <input
-                      type="url"
-                      value={activepiecesConfig.baseUrl}
-                      onChange={(e) => setActivepiecesConfig(prev => ({ ...prev, baseUrl: e.target.value }))}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="https://demo.activepieces.com"
-                    />
-                  </div>
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-700">{error}</p>
+            </div>
+          )}
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Project ID
-                    </label>
-                    <input
-                      type="text"
-                      value={activepiecesConfig.projectId}
-                      onChange={(e) => setActivepiecesConfig(prev => ({ ...prev, projectId: e.target.value }))}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="default-project"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <button
-                  onClick={handlePreview}
-                  className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-200 transition-colors duration-200 flex items-center justify-center space-x-2"
-                >
-                  <Code className="w-4 h-4" />
-                  <span>Preview Flow</span>
-                </button>
-
+          {/* Deployment Section */}
+          <div className="mb-8">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Deployment Status</h3>
+            
+            {!flow ? (
+              <div className="p-6 border-2 border-dashed border-gray-300 rounded-lg text-center">
+                <Zap className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h4 className="text-lg font-medium text-gray-900 mb-2">Ready to Deploy</h4>
+                <p className="text-gray-500 mb-4">
+                  Deploy your workflow to Activepieces to start running it
+                </p>
                 <button
                   onClick={handleDeploy}
-                  disabled={isDeploying || !activepiecesConfig.projectId}
-                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center space-x-2"
+                  disabled={isDeploying}
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-2 rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                 >
                   {isDeploying ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <Loader className="w-4 h-4 animate-spin" />
                       <span>Deploying...</span>
                     </>
                   ) : (
                     <>
-                      <Upload className="w-4 h-4" />
+                      <Play className="w-4 h-4" />
                       <span>Deploy to Activepieces</span>
                     </>
                   )}
                 </button>
-
-                {deploymentResult?.deployment && (
-                  <div className="space-y-2">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Test Input (JSON)
-                      </label>
-                      <textarea
-                        value={testInput}
-                        onChange={(e) => setTestInput(e.target.value)}
-                        className="w-full h-20 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-mono"
-                        placeholder='{"key": "value"}'
-                      />
-                    </div>
-                    
-                    <button
-                      onClick={handleTest}
-                      disabled={isTesting}
-                      className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors duration-200 flex items-center justify-center space-x-2"
-                    >
-                      {isTesting ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          <span>Testing...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-4 h-4" />
-                          <span>Test Flow</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Workflow Summary */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h4 className="font-medium text-gray-900 mb-2">Workflow Summary</h4>
-                <div className="space-y-1 text-sm text-gray-600">
-                  <div>Nodes: {nodes.length}</div>
-                  <div>Connections: {edges.length}</div>
-                  <div>Agent: {agentName}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Panel - Results */}
-          <div className="flex-1 p-6">
-            {showPreview && previewData ? (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium text-gray-900">Generated Flow Preview</h3>
-                  <button
-                    onClick={handleDownloadFlow}
-                    className="flex items-center space-x-2 text-blue-600 hover:text-blue-700"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Download Flow</span>
-                  </button>
-                </div>
-
-                {previewData.errors.length > 0 && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <AlertCircle className="w-4 h-4 text-red-500" />
-                      <span className="font-medium text-red-900">Validation Errors</span>
-                    </div>
-                    <div className="space-y-1">
-                      {previewData.errors.map((error: string, index: number) => (
-                        <div key={index} className="text-sm text-red-700">• {error}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {previewData.warnings.length > 0 && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <AlertCircle className="w-4 h-4 text-yellow-500" />
-                      <span className="font-medium text-yellow-900">Warnings</span>
-                    </div>
-                    <div className="space-y-1">
-                      {previewData.warnings.map((warning: string, index: number) => (
-                        <div key={index} className="text-sm text-yellow-700">• {warning}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Flow Definition</h4>
-                  <div className="border border-gray-200 rounded-lg">
-                    <div className="p-4 bg-gray-50 border-b border-gray-200">
-                      <h5 className="font-medium text-gray-900">{previewData.flowVersion.displayName}</h5>
-                    </div>
-                    <div className="p-4">
-                      <pre className="text-xs bg-gray-50 p-3 rounded overflow-auto max-h-64">
-                        {JSON.stringify(previewData.flowVersion, null, 2)}
-                      </pre>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : deploymentResult ? (
-              <div className="space-y-6">
-                <h3 className="text-lg font-medium text-gray-900">Deployment Result</h3>
-                
-                {deploymentResult.deployment ? (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <div className="flex items-center space-x-2 mb-4">
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                      <span className="font-medium text-green-900">Deployment Successful</span>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      <div>
-                        <span className="text-sm font-medium text-green-900">Flow ID:</span>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <code className="text-sm bg-green-100 px-2 py-1 rounded">
-                            {deploymentResult.deployment.flowId}
-                          </code>
-                          <button className="text-green-600 hover:text-green-700">
-                            <ExternalLink className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <span className="text-sm font-medium text-green-900">Project ID:</span>
-                        <code className="block text-sm bg-green-100 px-2 py-1 rounded mt-1">
-                          {deploymentResult.deployment.projectId}
-                        </code>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <div className="flex items-center space-x-2 mb-4">
-                      <AlertCircle className="w-5 h-5 text-red-500" />
-                      <span className="font-medium text-red-900">Deployment Failed</span>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      {deploymentResult.errors?.map((error: string, index: number) => (
-                        <div key={index} className="text-sm text-red-700">• {error}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {testResult && (
-                  <div className="space-y-4">
-                    <h4 className="font-medium text-gray-900">Test Execution Result</h4>
-                    
-                    {testResult.success ? (
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                          <span className="font-medium text-green-900">Test Successful</span>
-                        </div>
-                        
-                        {testResult.runId && (
-                          <div className="text-sm text-green-700">
-                            Run ID: <code>{testResult.runId}</code>
-                          </div>
-                        )}
-                        
-                        {testResult.status && (
-                          <div className="text-sm text-green-700">
-                            Status: <span className="font-medium">{testResult.status}</span>
-                          </div>
-                        )}
-
-                        {testResult.logs && testResult.logs.length > 0 && (
-                          <details className="mt-3">
-                            <summary className="text-sm text-green-700 cursor-pointer">View Logs</summary>
-                            <pre className="mt-2 p-2 bg-green-100 rounded text-xs overflow-auto max-h-32">
-                              {testResult.logs.join('\n')}
-                            </pre>
-                          </details>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <AlertCircle className="w-4 h-4 text-red-500" />
-                          <span className="font-medium text-red-900">Test Failed</span>
-                        </div>
-                        
-                        <div className="text-sm text-red-700">
-                          {testResult.error}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             ) : (
-              <div className="flex items-center justify-center h-full text-gray-500">
-                <div className="text-center">
-                  <Activity className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>Configure Activepieces settings and deploy your workflow</p>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <CheckCircle className="w-6 h-6 text-green-600" />
+                    <div>
+                      <h4 className="text-lg font-medium text-green-900">{flow.displayName}</h4>
+                      <p className="text-green-700">Successfully deployed to Activepieces</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      flow.status === 'ENABLED' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {flow.status}
+                    </span>
+                    <a
+                      href={`https://activepieces-production-aa7c.up.railway.app/flows/${flow.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-green-600 hover:text-green-700 transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
+                </div>
+                
+                <div className="text-sm text-green-700">
+                  <p><strong>Flow ID:</strong> {flow.id}</p>
+                  <p><strong>Created:</strong> {formatDate(flow.created)}</p>
+                  <p><strong>Last Updated:</strong> {formatDate(flow.updated)}</p>
                 </div>
               </div>
             )}
           </div>
+
+          {/* Test Run Section */}
+          {flow && (
+            <div className="mb-8">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Test Run</h3>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Test Input (JSON)
+                  </label>
+                  <textarea
+                    value={testInput}
+                    onChange={(e) => setTestInput(e.target.value)}
+                    placeholder='{"message": "Hello, world!"}'
+                    className="w-full h-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
+                  />
+                </div>
+                <button
+                  onClick={handleTestRun}
+                  disabled={isLoading || !flow}
+                  className="bg-blue-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader className="w-4 h-4 animate-spin" />
+                      <span>Running...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4" />
+                      <span>Test Run</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Execution History */}
+          {runs.length > 0 && (
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Executions</h3>
+              <div className="space-y-3">
+                {runs.map((run) => (
+                  <div key={run.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-3">
+                        <div className={getStatusColor(run.status)}>
+                          {getStatusIcon(run.status)}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">Run {run.id}</p>
+                          <p className="text-sm text-gray-500">Started: {formatDate(run.started)}</p>
+                        </div>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        run.status === 'SUCCEEDED' ? 'bg-green-100 text-green-800' :
+                        run.status === 'FAILED' ? 'bg-red-100 text-red-800' :
+                        run.status === 'RUNNING' ? 'bg-blue-100 text-blue-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {run.status}
+                      </span>
+                    </div>
+                    
+                    {run.finished && (
+                      <p className="text-sm text-gray-500 mb-2">
+                        Completed: {formatDate(run.finished)}
+                      </p>
+                    )}
+                    
+                    {run.output && (
+                      <details className="mt-2">
+                        <summary className="text-sm font-medium text-gray-700 cursor-pointer">
+                          View Output
+                        </summary>
+                        <pre className="mt-2 text-xs bg-gray-50 p-2 rounded border overflow-x-auto">
+                          {JSON.stringify(run.output, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
 
-export default ActivepiecesDeployment;
+export default ActivepiecesDeployment; 

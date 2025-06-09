@@ -4,6 +4,14 @@ import { AgentBlock } from '../types';
 // Initialize OpenAI with environment variable
 const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
 
+// Debug logging for production troubleshooting
+console.log('OpenAI API Key status:', {
+  exists: !!apiKey,
+  length: apiKey?.length || 0,
+  prefix: apiKey?.substring(0, 7) || 'none',
+  suffix: apiKey?.substring(-4) || 'none'
+});
+
 if (!apiKey) {
   console.error('OpenAI API key not found. Please set VITE_OPENAI_API_KEY in your environment variables.');
 }
