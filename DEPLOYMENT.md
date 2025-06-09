@@ -31,12 +31,20 @@ In Netlify dashboard → Site settings → Environment variables, add:
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+VITE_OPENAI_API_KEY=your_openai_api_key
 ```
 
-**To get these values from Supabase:**
+**To get these values:**
+
+**Supabase:**
 1. Go to your Supabase project dashboard
 2. Navigate to Settings → API
 3. Copy the "Project URL" and "Project API Key (anon public)"
+
+**OpenAI:**
+1. Go to [OpenAI API Keys](https://platform.openai.com/api-keys)
+2. Create a new API key or use your existing one
+3. Copy the key (starts with `sk-proj-...`)
 
 ## Step 4: Deploy
 

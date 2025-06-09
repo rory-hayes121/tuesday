@@ -1,9 +1,9 @@
 import OpenAI from 'openai';
 import { AgentBlock } from '../types';
 
-// Initialize OpenAI with the provided API key
+// Initialize OpenAI with environment variable or fallback key
 const openai = new OpenAI({
-  apiKey: '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',
+  apiKey: import.meta.env.VITE_OPENAI_API_KEY || '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',
   dangerouslyAllowBrowser: true // Enable for client-side usage
 });
 
