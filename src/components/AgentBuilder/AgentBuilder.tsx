@@ -332,11 +332,23 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
         throw error;
       }
 
-      alert(`Successfully deployed to Activepieces! Flow ID: ${flow.id}`);
+      alert(`Successfully deployed! Flow ID: ${flow.id}`);
       
     } catch (error) {
       console.error('Deployment failed:', error);
-      alert(`Deployment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Handle specific error types
+      if (error instanceof Error) {
+        if (error.message.includes('403')) {
+          alert(`Deployment failed: The execution engine requires authentication. Please contact support to configure deployment access.`);
+        } else if (error.message.includes('CORS')) {
+          alert(`Deployment failed: Connection issue with execution engine. Please check your network connection and try again.`);
+        } else {
+          alert(`Deployment failed: ${error.message}`);
+        }
+      } else {
+        alert('Deployment failed: Unknown error occurred');
+      }
     } finally {
       setIsDeploying(false);
     }
