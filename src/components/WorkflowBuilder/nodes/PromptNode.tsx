@@ -1,6 +1,6 @@
 import React from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { MessageSquare, Settings, AlertCircle, Plus } from 'lucide-react';
+import { MessageSquare, Settings, AlertCircle } from 'lucide-react';
 import { WorkflowNode } from '../../../types/workflow';
 
 const PromptNode: React.FC<NodeProps<WorkflowNode['data']>> = ({ 
@@ -9,8 +9,8 @@ const PromptNode: React.FC<NodeProps<WorkflowNode['data']>> = ({
   id 
 }) => {
   const hasErrors = data.errors && data.errors.length > 0;
-  const instruction = data.config?.instruction || 'No instruction set';
-  const model = data.config?.model || 'gpt-4';
+  const promptText = data.config?.prompt || 'No prompt set';
+  const model = data.config?.model || 'GPT-4';
 
   return (
     <div className="relative">
@@ -22,16 +22,12 @@ const PromptNode: React.FC<NodeProps<WorkflowNode['data']>> = ({
           : 'border-gray-200 hover:border-gray-300 hover:shadow-xl'
       }`}>
         {/* Input Handle */}
-        {data.inputs?.map(input => (
-          <Handle
-            key={input.id}
-            type="target"
-            position={Position.Top}
-            id={input.id}
-            className="w-3 h-3 bg-gray-400 border-2 border-white hover:bg-blue-500 transition-colors duration-200"
-            style={{ top: -6, left: '50%', transform: 'translateX(-50%)' }}
-          />
-        ))}
+        <Handle
+          type="target"
+          position={Position.Top}
+          id="input"
+          className="w-3 h-3 border-2 border-gray-300 bg-white hover:border-blue-400 transition-colors"
+        />
 
         {/* Header */}
         <div className="p-4 bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-xl">
@@ -53,23 +49,24 @@ const PromptNode: React.FC<NodeProps<WorkflowNode['data']>> = ({
         <div className="p-4">
           <div className="space-y-3">
             <div>
-              <h4 className="font-medium text-gray-900 mb-2 line-clamp-2">
+              <h4 className="font-medium text-gray-900 mb-2">
                 {data.label}
               </h4>
-              <p className="text-sm text-gray-600 line-clamp-3">
-                {instruction}
-              </p>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <span className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full font-medium">
-                {model}
-              </span>
-              {data.config?.temperature !== undefined && (
-                <span className="text-xs text-gray-500">
-                  Temp: {data.config.temperature}
-                </span>
-              )}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">Model:</span>
+                  <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
+                    {model}
+                  </span>
+                </div>
+                
+                <div>
+                  <span className="text-sm text-gray-500">Prompt:</span>
+                  <p className="text-sm text-gray-900 mt-1 p-2 bg-gray-50 rounded border max-h-20 overflow-y-auto">
+                    {promptText}
+                  </p>
+                </div>
+              </div>
             </div>
 
             {hasErrors && (
@@ -85,31 +82,14 @@ const PromptNode: React.FC<NodeProps<WorkflowNode['data']>> = ({
           </div>
         </div>
 
-        {/* Output Handle with Connection Line */}
-        {data.outputs?.map(output => (
-          <Handle
-            key={output.id}
-            type="source"
-            position={Position.Bottom}
-            id={output.id}
-            className="w-3 h-3 bg-gray-400 border-2 border-white hover:bg-blue-500 transition-colors duration-200"
-            style={{ bottom: -6, left: '50%', transform: 'translateX(-50%)' }}
-          />
-        ))}
+        {/* Output Handle */}
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          id="output"
+          className="w-3 h-3 border-2 border-gray-300 bg-white hover:border-blue-400 transition-colors"
+        />
       </div>
-
-      {/* Connection Line with Add Button */}
-      {(!data.hasOutgoing && data.onAddNode) && (
-        <div className="absolute top-full left-1/2 transform -translate-x-1/2 flex flex-col items-center">
-          <div className="w-0.5 h-12 bg-gray-300 opacity-50"></div>
-          <button
-            onClick={() => data.onAddNode(id)}
-            className="w-8 h-8 bg-white border-2 border-gray-300 rounded-full flex items-center justify-center hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 shadow-sm hover:shadow-md"
-          >
-            <Plus className="w-4 h-4 text-gray-500 hover:text-blue-600" />
-          </button>
-        </div>
-      )}
     </div>
   );
 };
