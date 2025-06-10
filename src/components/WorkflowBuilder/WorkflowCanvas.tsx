@@ -15,6 +15,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 import { useWorkflowStore } from '../../stores/workflowStore';
+import { WorkflowNode, WorkflowEdge } from '../../types/workflow';
 import PromptNode from './nodes/PromptNode';
 import ToolNode from './nodes/ToolNode';
 import LogicNode from './nodes/LogicNode';
@@ -45,8 +46,8 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ className = '' }) => {
     addNode, 
     updateNode, 
     deleteNode,
-    addEdge: addWorkflowEdge,
-    deleteEdge 
+    selectNode,
+    onConnect: storeOnConnect
   } = useWorkflowStore();
 
   const [localNodes, setLocalNodes, onNodesChange] = useNodesState(nodes);
@@ -63,18 +64,20 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ className = '' }) => {
 
   const onConnect = useCallback(
     (params: Connection) => {
-      const newEdge = {
+      const newEdge: WorkflowEdge = {
         id: `edge-${params.source}-${params.target}`,
         source: params.source!,
         target: params.target!,
-        sourceHandle: params.sourceHandle,
-        targetHandle: params.targetHandle,
+        sourceHandle: params.sourceHandle || undefined,
+        targetHandle: params.targetHandle || undefined,
+        type: 'default'
       };
       
       setLocalEdges((eds) => addEdge(newEdge, eds));
-      addWorkflowEdge(newEdge);
+      // Update the store with the new edge
+      setEdges([...edges, newEdge]);
     },
-    [setLocalEdges, addWorkflowEdge]
+    [setLocalEdges, edges, setEdges]
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -98,26 +101,31 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ className = '' }) => {
         y: event.clientY - reactFlowBounds.top,
       });
 
-      const newNode: Node = {
-        id: `${type}-${Date.now()}`,
-        type,
+      const newNode: Omit<WorkflowNode, 'id'> = {
+        type: type as WorkflowNode['type'],
         position,
         data: {
           label: `${type.charAt(0).toUpperCase() + type.slice(1)} Node`,
+          description: '',
           config: {},
+          inputs: [{ id: 'input', type: 'target', position: 'top' }],
+          outputs: [{ id: 'output', type: 'source', position: 'bottom' }],
+          isValid: true,
+          errors: []
         },
       };
 
-      setLocalNodes((nds) => nds.concat(newNode));
       addNode(newNode);
     },
-    [reactFlowInstance, setLocalNodes, addNode]
+    [reactFlowInstance, addNode]
   );
 
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
     // Handle node selection for properties panel
     console.log('Node clicked:', node);
-  }, []);
+    // Use the workflow store's selectNode function
+    selectNode(node.id);
+  }, [selectNode]);
 
   const onNodeDelete = useCallback((nodesToDelete: Node[]) => {
     nodesToDelete.forEach(node => {
@@ -126,10 +134,11 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ className = '' }) => {
   }, [deleteNode]);
 
   const onEdgeDelete = useCallback((edgesToDelete: Edge[]) => {
-    edgesToDelete.forEach(edge => {
-      deleteEdge(edge.id);
-    });
-  }, [deleteEdge]);
+    // Filter out deleted edges
+    const edgeIdsToDelete = edgesToDelete.map(edge => edge.id);
+    const remainingEdges = edges.filter(edge => !edgeIdsToDelete.includes(edge.id));
+    setEdges(remainingEdges);
+  }, [edges, setEdges]);
 
   return (
     <div className={`h-full w-full ${className}`} ref={reactFlowWrapper}>
