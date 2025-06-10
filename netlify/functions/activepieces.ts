@@ -190,6 +190,47 @@ async function testConnection(): Promise<{ success: boolean; error?: string }> {
   }
 }
 
+// Debug function to check schema
+async function debugSchema(): Promise<any> {
+  const client = await pool.connect();
+  
+  try {
+    // Check flow table structure
+    const flowSchema = await client.query(`
+      SELECT column_name, is_nullable, data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'flow' 
+      ORDER BY ordinal_position;
+    `);
+    
+    // Check flow_version table structure  
+    const versionSchema = await client.query(`
+      SELECT column_name, is_nullable, data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'flow_version' 
+      ORDER BY ordinal_position;
+    `);
+    
+    // Check existing flows
+    const existingFlows = await client.query(`
+      SELECT f.id, f."publishedVersionId", fv.id as version_id, fv."flowId"
+      FROM flow f 
+      LEFT JOIN flow_version fv ON f."publishedVersionId" = fv.id 
+      WHERE f."projectId" = $1 
+      LIMIT 3;
+    `, [PROJECT_ID]);
+
+    return {
+      flowSchema: flowSchema.rows,
+      versionSchema: versionSchema.rows,
+      existingFlows: existingFlows.rows
+    };
+
+  } finally {
+    client.release();
+  }
+}
+
 export const handler: Handler = async (event, context) => {
   // Enable CORS
   const headers = {
@@ -247,6 +288,16 @@ export const handler: Handler = async (event, context) => {
           authRequired: false,
           error: result.error 
         }),
+      };
+    }
+
+    if (method === 'GET' && path === '/debug') {
+      const result = await debugSchema();
+      
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify(result),
       };
     }
 
