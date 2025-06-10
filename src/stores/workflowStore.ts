@@ -37,6 +37,9 @@ interface WorkflowState {
   validateWorkflow: () => void;
   undo: () => void;
   redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+  autoLayout: () => void;
   clearHistory: () => void;
   resetWorkflow: () => void;
 }
@@ -213,6 +216,20 @@ export const useWorkflowStore = create<WorkflowState>()(
             future: newFuture
           }
         });
+      },
+
+      canUndo: () => {
+        const state = get();
+        return state.history.past.length > 0;
+      },
+
+      canRedo: () => {
+        const state = get();
+        return state.history.future.length > 0;
+      },
+
+      autoLayout: () => {
+        // Implementation of autoLayout function
       },
 
       clearHistory: () => {

@@ -37,14 +37,17 @@ const WorkflowToolbar: React.FC<WorkflowToolbarProps> = ({
     canUndo, 
     canRedo, 
     autoLayout,
-    validationResult,
+    validationErrors,
     validateWorkflow
   } = useWorkflowStore();
 
   const handleValidate = () => {
-    const result = validateWorkflow();
-    console.log('Validation result:', result);
+    validateWorkflow();
   };
+
+  // Convert validationErrors to validation result format
+  const hasErrors = Object.keys(validationErrors).length > 0;
+  const allErrors = Object.values(validationErrors).flat();
 
   return (
     <div className="bg-white border-b border-gray-200 px-6 py-4">
@@ -138,20 +141,13 @@ const WorkflowToolbar: React.FC<WorkflowToolbarProps> = ({
         <div className="flex items-center space-x-4">
           {/* Validation Status */}
           <div className="flex items-center space-x-2">
-            {validationResult ? (
-              validationResult.isValid ? (
-                <div className="flex items-center space-x-2 text-green-600">
-                  <CheckCircle className="w-4 h-4" />
-                  <span className="text-sm font-medium">Valid</span>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2 text-red-600">
-                  <AlertTriangle className="w-4 h-4" />
-                  <span className="text-sm font-medium">
-                    {validationResult.errors.length} error{validationResult.errors.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-              )
+            {hasErrors ? (
+              <div className="flex items-center space-x-2 text-red-600">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  {allErrors.length} error{allErrors.length !== 1 ? 's' : ''}
+                </span>
+              </div>
             ) : (
               <button
                 onClick={handleValidate}
@@ -174,35 +170,17 @@ const WorkflowToolbar: React.FC<WorkflowToolbarProps> = ({
       </div>
 
       {/* Validation Details */}
-      {validationResult && !validationResult.isValid && (
+      {hasErrors && (
         <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
           <div className="space-y-1">
-            {validationResult.errors.slice(0, 3).map((error, index) => (
+            {allErrors.slice(0, 3).map((error, index) => (
               <div key={index} className="text-sm text-red-700">
-                • {error.message}
+                • {error}
               </div>
             ))}
-            {validationResult.errors.length > 3 && (
+            {allErrors.length > 3 && (
               <div className="text-sm text-red-600">
-                +{validationResult.errors.length - 3} more errors
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Warnings */}
-      {validationResult && validationResult.warnings.length > 0 && (
-        <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <div className="space-y-1">
-            {validationResult.warnings.slice(0, 2).map((warning, index) => (
-              <div key={index} className="text-sm text-yellow-700">
-                • {warning.message}
-              </div>
-            ))}
-            {validationResult.warnings.length > 2 && (
-              <div className="text-sm text-yellow-600">
-                +{validationResult.warnings.length - 2} more warnings
+                +{allErrors.length - 3} more errors
               </div>
             )}
           </div>
