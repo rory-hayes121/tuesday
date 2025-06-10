@@ -15,6 +15,7 @@ import {
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
 import { activepiecesClient } from '../../services/activepieces';
+import { useWorkflowStore } from '../../stores/workflowStore';
 import { WorkflowNode, WorkflowEdge } from '../../types/workflow';
 import WorkflowCanvas from '../WorkflowBuilder/WorkflowCanvas';
 import BlockPalette from '../WorkflowBuilder/BlockPalette';
@@ -35,6 +36,7 @@ interface AgentBuilderProps {
 const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, onSave, onTest }) => {
   const [agentName, setAgentName] = useState('Untitled Agent');
   const [agentDescription, setAgentDescription] = useState('');
+  const [currentAgentId, setCurrentAgentId] = useState<string | null>(agentId || null);
   const [showPalette, setShowPalette] = useState(false);
   const [isTestMode, setIsTestMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -45,10 +47,19 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
   const [showAddModal, setShowAddModal] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
 
-  // Simple state management for nodes and edges (no complex store)
-  const [nodes, setNodes] = useState<WorkflowNode[]>([]);
-  const [edges, setEdges] = useState<WorkflowEdge[]>([]);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  // Use workflow store instead of local state
+  const { 
+    nodes, 
+    edges, 
+    setNodes, 
+    setEdges, 
+    addNode, 
+    updateNode, 
+    deleteNode,
+    selectedNodeId,
+    selectNode,
+    resetWorkflow
+  } = useWorkflowStore();
 
   const { user, workspace } = useAuth();
 
@@ -88,10 +99,12 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
         setAgentName(agent.name);
         setAgentDescription(agent.description || '');
         
-        // Load the workflow blocks
+        // Load the workflow blocks into the store
         if (agent.blocks && agent.blocks.nodes) {
           setNodes(agent.blocks.nodes);
           setEdges(agent.blocks.edges || []);
+        } else {
+          resetWorkflow();
         }
       }
     } catch (error) {
@@ -143,14 +156,12 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
         setEdges(transformedEdges);
       } else {
         console.warn('No valid nodes found in generated agent');
-        setNodes([]);
-        setEdges([]);
+        resetWorkflow();
       }
     } catch (error) {
       console.error('Error loading generated agent:', error);
       // Fallback to empty workflow
-      setNodes([]);
-      setEdges([]);
+      resetWorkflow();
     }
   };
 
@@ -179,12 +190,14 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
         updated_at: new Date().toISOString()
       };
 
-      if (agentId) {
+      let savedAgentId = currentAgentId;
+
+      if (currentAgentId) {
         // Update existing agent
         const { error } = await supabase
           .from('agents')
           .update(agentData)
-          .eq('id', agentId);
+          .eq('id', currentAgentId);
 
         if (error) {
           throw error;
@@ -201,18 +214,22 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
           throw error;
         }
 
-        // Update the workflow reference
+        // Update the current agent ID
+        savedAgentId = data.id;
+        setCurrentAgentId(data.id);
         console.log('Agent saved with ID:', data.id);
       }
 
       onSave(workflow);
+      return savedAgentId;
     } catch (error) {
       console.error('Failed to save agent:', error);
       alert('Failed to save agent. Please try again.');
+      throw error;
     } finally {
       setIsSaving(false);
     }
-  }, [agentId, agentName, agentDescription, nodes, edges, workspace, user, onSave]);
+  }, [currentAgentId, agentName, agentDescription, nodes, edges, workspace, user, onSave]);
 
   // Simple validation function (fixed for actual workflow node types)
   const validateWorkflow = (): { isValid: boolean; errors: string[] } => {
@@ -248,37 +265,6 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
     };
   };
 
-  // Add node function
-  const addNode = useCallback((type: WorkflowNode['type'], position: { x: number; y: number }) => {
-    const newNode: WorkflowNode = {
-      id: `${type}_${Date.now()}`,
-      type,
-      position,
-      data: {
-        label: `${type.charAt(0).toUpperCase() + type.slice(1)} Node`,
-        config: {},
-        inputs: [{ id: 'input', type: 'target', position: 'left' }],
-        outputs: [{ id: 'output', type: 'source', position: 'right' }],
-      },
-    };
-
-    setNodes(prev => [...prev, newNode]);
-    setSelectedNodeId(newNode.id);
-  }, []);
-
-  // Connection handler
-  const onConnect = useCallback((params: any) => {
-    const newEdge: WorkflowEdge = {
-      id: `${params.source}-${params.target}`,
-      source: params.source,
-      target: params.target,
-      sourceHandle: params.sourceHandle,
-      targetHandle: params.targetHandle,
-    };
-
-    setEdges(prev => [...prev, newEdge]);
-  }, []);
-
   const handleTest = useCallback(async () => {
     const validation = validateWorkflow();
     if (!validation.isValid) {
@@ -300,9 +286,21 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
       return;
     }
 
-    if (!agentId) {
-      alert('Please save the agent before deploying');
-      return;
+    let deployAgentId = currentAgentId;
+
+    // If no agent ID, save first
+    if (!deployAgentId) {
+      try {
+        const savedId = await handleSave();
+        if (!savedId) {
+          alert('Failed to save agent before deployment');
+          return;
+        }
+        deployAgentId = savedId;
+      } catch (error) {
+        alert('Please save the agent before deploying');
+        return;
+      }
     }
 
     try {
@@ -328,7 +326,7 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
           activepieces_flow_id: flow.id,
           status: 'active'
         })
-        .eq('id', agentId);
+        .eq('id', deployAgentId);
 
       if (error) {
         throw error;
@@ -342,15 +340,15 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
     } finally {
       setIsDeploying(false);
     }
-  }, [validateWorkflow, agentId, agentName, agentDescription, nodes, edges]);
+  }, [validateWorkflow, currentAgentId, agentName, agentDescription, nodes, edges, handleSave]);
 
   const handleNodeSelect = useCallback((nodeId: string | null) => {
-    setSelectedNodeId(nodeId);
-  }, []);
+    selectNode(nodeId);
+  }, [selectNode]);
 
   const handleCanvasClick = useCallback(() => {
-    setSelectedNodeId(null);
-  }, []);
+    selectNode(null);
+  }, [selectNode]);
 
   const handleAddNode = useCallback(() => {
     setShowAddModal(true);
@@ -395,16 +393,14 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
             </div>
           </div>
           
-          {/* Deploy Button (only show for saved agents) */}
-          {agentId && (
-            <button
-              onClick={() => setShowActivepiecesDeploy(true)}
-              className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center space-x-2"
-            >
-              <Upload className="w-4 h-4" />
-              <span>Deploy</span>
-            </button>
-          )}
+          {/* Deploy Button - now always shows, auto-saves if needed */}
+          <button
+            onClick={() => setShowActivepiecesDeploy(true)}
+            className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center space-x-2"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Deploy</span>
+          </button>
         </div>
       </div>
 
@@ -434,7 +430,7 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
         {selectedNodeId && (
           <PropertiesPanel
             nodeId={selectedNodeId}
-            onClose={() => setSelectedNodeId(null)}
+            onClose={() => selectNode(null)}
           />
         )}
       </div>
@@ -452,7 +448,7 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
 
       {showActivepiecesDeploy && (
         <ActivepiecesDeployment
-          agentId={agentId || 'new'}
+          agentId={currentAgentId || 'new'}
           flowId={undefined}
           onDeploy={handleActivepiecesDeploy}
           onClose={() => setShowActivepiecesDeploy(false)}
@@ -463,9 +459,8 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         onAddNode={(template) => {
-          const nodeId = `${template.type}-${Date.now()}`;
           const newNode = {
-            id: nodeId,
+            id: `${template.type}-${Date.now()}`,
             type: template.type,
             position: { x: 400, y: nodes.length * 200 + 100 },
             data: {
@@ -480,15 +475,15 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
             }
           };
           
-          addNode(newNode.type, newNode.position);
+          addNode(newNode);
           
           // If there are existing nodes, connect to the last one
           if (nodes.length > 0) {
             const lastNode = nodes[nodes.length - 1];
             const newEdge = {
-              id: `edge-${lastNode.id}-${nodeId}-${Date.now()}`,
+              id: `edge-${lastNode.id}-${newNode.id}-${Date.now()}`,
               source: lastNode.id,
-              target: nodeId,
+              target: newNode.id,
               sourceHandle: undefined,
               targetHandle: undefined,
               type: 'default' as const
