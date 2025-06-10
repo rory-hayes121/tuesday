@@ -277,6 +277,50 @@ async function compareFlows(): Promise<any> {
   }
 }
 
+// Cleanup function to delete Tuesday-created flows
+async function cleanupTuesdayFlows(): Promise<any> {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Find Tuesday flows
+    const tuesdayFlows = await client.query(`
+      SELECT f.id, fv.id as version_id
+      FROM flow f
+      LEFT JOIN flow_version fv ON f.id = fv."flowId"
+      WHERE f."externalId" LIKE 'tuesday-%'
+    `);
+    
+    console.log('Found Tuesday flows to delete:', tuesdayFlows.rows);
+    
+    // Delete flow_versions first (due to FK constraints)
+    for (const row of tuesdayFlows.rows) {
+      if (row.version_id) {
+        await client.query('DELETE FROM flow_version WHERE id = $1', [row.version_id]);
+      }
+    }
+    
+    // Then delete flows
+    const deleteResult = await client.query(`
+      DELETE FROM flow WHERE "externalId" LIKE 'tuesday-%'
+    `);
+    
+    await client.query('COMMIT');
+    
+    return {
+      deletedFlows: deleteResult.rowCount,
+      flowsFound: tuesdayFlows.rows
+    };
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export const handler: Handler = async (event, context) => {
   // Enable CORS
   const headers = {
@@ -349,6 +393,16 @@ export const handler: Handler = async (event, context) => {
 
     if (method === 'GET' && path === '/compare') {
       const result = await compareFlows();
+      
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify(result),
+      };
+    }
+
+    if (method === 'GET' && path === '/cleanup') {
+      const result = await cleanupTuesdayFlows();
       
       return {
         statusCode: 200,
