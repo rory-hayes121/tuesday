@@ -25,6 +25,7 @@ import TestRunner from '../WorkflowBuilder/TestRunner';
 import WorkflowPreview from '../WorkflowBuilder/WorkflowPreview';
 import ActivepiecesDeployment from '../WorkflowBuilder/ActivepiecesDeployment';
 import AddNodeModal from '../WorkflowBuilder/AddNodeModal';
+import ActivepiecesAuthModal from '../WorkflowBuilder/ActivepiecesAuthModal';
 
 interface AgentBuilderProps {
   agentId?: string | null;
@@ -46,6 +47,9 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
   const [showActivepiecesDeploy, setShowActivepiecesDeploy] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authModalMessage, setAuthModalMessage] = useState('');
+  const [authPromiseResolve, setAuthPromiseResolve] = useState<((token: string) => void) | null>(null);
 
   // Use workflow store instead of local state
   const { 
@@ -77,6 +81,17 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
       setAgentDescription('');
     }
   }, [agentId, generatedAgent]);
+
+  useEffect(() => {
+    // Set up authentication prompt callback for Activepieces client
+    activepiecesClient.setAuthPromptCallback(async (message: string) => {
+      return new Promise<string>((resolve) => {
+        setAuthModalMessage(message);
+        setAuthPromiseResolve(() => resolve);
+        setShowAuthModal(true);
+      });
+    });
+  }, []);
 
   const loadAgent = async () => {
     if (!agentId) return;
@@ -366,6 +381,22 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
     setShowAddModal(true);
   }, []);
 
+  const handleAuthTokenSubmit = (token: string) => {
+    if (authPromiseResolve) {
+      authPromiseResolve(token);
+      setAuthPromiseResolve(null);
+    }
+    setShowAuthModal(false);
+  };
+
+  const handleAuthModalClose = () => {
+    if (authPromiseResolve) {
+      authPromiseResolve(''); // Resolve with empty string to indicate cancellation
+      setAuthPromiseResolve(null);
+    }
+    setShowAuthModal(false);
+  };
+
   if (isLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
@@ -508,6 +539,13 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
           setShowAddModal(false);
         }}
         position={null}
+      />
+
+      <ActivepiecesAuthModal
+        isOpen={showAuthModal}
+        onClose={handleAuthModalClose}
+        onTokenSubmit={handleAuthTokenSubmit}
+        message={authModalMessage}
       />
     </div>
   );

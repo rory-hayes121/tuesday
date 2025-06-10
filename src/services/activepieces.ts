@@ -1,7 +1,7 @@
 /**
  * Activepieces API Client
  * Interfaces with self-hosted Activepieces instance at activepieces-production-aa7c.up.railway.app
- * For self-hosted instances, we use direct integration instead of REST API
+ * Uses session-based authentication for real flow creation
  */
 
 interface ActivepiecesCredential {
@@ -54,108 +54,260 @@ interface ExecuteFlowRequest {
   input?: any;
 }
 
+interface SessionToken {
+  token: string;
+  expiresAt: number;
+  projectId: string;
+}
+
 class ActivepiecesClient {
   private baseUrl: string;
   private projectId: string;
-  private isServerSide: boolean;
+  private sessionToken: SessionToken | null = null;
+  private authPromptCallback: ((message: string) => Promise<string>) | null = null;
 
   constructor() {
     this.baseUrl = 'https://activepieces-production-aa7c.up.railway.app';
-    // Use the actual project ID from the Railway deployment
     this.projectId = import.meta.env.VITE_ACTIVEPIECES_PROJECT_ID || 'C8NIVPDXRrRamepemIuFV';
-    // Check if we're running server-side (for direct DB access)
-    this.isServerSide = typeof window === 'undefined';
 
-    console.log('Activepieces Client initialized for self-hosted instance:', {
+    console.log('Activepieces Client initialized for session-based authentication:', {
       baseUrl: this.baseUrl,
-      projectId: this.projectId,
-      mode: this.isServerSide ? 'server-side' : 'client-side'
+      projectId: this.projectId
     });
   }
 
-  // For self-hosted instances, we bypass the REST API and use direct database operations
-  private async createFlowDirect(data: CreateFlowRequest): Promise<ActivepiecesFlow> {
-    // Since we're self-hosted, we can directly insert into the database
-    // This simulates what the REST API would do internally
-    
-    const flowId = `flow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const now = new Date().toISOString();
-    
-    const flow: ActivepiecesFlow = {
-      id: flowId,
-      displayName: data.displayName,
-      status: data.status || 'ENABLED',
-      projectId: this.projectId,
-      trigger: data.trigger,
-      steps: data.steps,
-      created: now,
-      updated: now
-    };
-
-    // In a real implementation, this would directly insert into PostgreSQL
-    // For now, we'll simulate the creation and return the flow object
-    console.log('Direct flow creation (simulated):', flow);
-    
-    return flow;
+  // Set callback for authentication prompts
+  setAuthPromptCallback(callback: (message: string) => Promise<string>) {
+    this.authPromptCallback = callback;
   }
 
-  // Public method for flow creation that handles self-hosted logic
+  // Extract JWT token from browser (user needs to be logged into Activepieces)
+  private extractTokenFromBrowser(): string | null {
+    try {
+      // Check if we're in a browser environment
+      if (typeof window === 'undefined') return null;
+
+      // Try to get token from localStorage (common in SPAs)
+      const storedToken = localStorage.getItem('activepieces_token') || 
+                         localStorage.getItem('token') ||
+                         localStorage.getItem('access_token');
+      
+      if (storedToken) {
+        return storedToken;
+      }
+
+      // Try to extract from cookies
+      const cookies = document.cookie.split(';');
+      for (const cookie of cookies) {
+        const [name, value] = cookie.trim().split('=');
+        if (name.includes('token') || name.includes('auth') || name.includes('jwt')) {
+          return value;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.warn('Failed to extract token from browser:', error);
+      return null;
+    }
+  }
+
+  // Parse JWT token to get expiration
+  private parseJWT(token: string): { exp?: number; projectId?: string } {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      
+      return JSON.parse(jsonPayload);
+    } catch (error) {
+      console.warn('Failed to parse JWT:', error);
+      return {};
+    }
+  }
+
+  // Check if token is valid and not expired
+  private isTokenValid(token: string): boolean {
+    const parsed = this.parseJWT(token);
+    if (!parsed.exp) return false;
+    
+    // Check if token expires in next 5 minutes (buffer for requests)
+    const expiresAt = parsed.exp * 1000;
+    const now = Date.now();
+    return expiresAt > (now + 5 * 60 * 1000);
+  }
+
+  // Prompt user for fresh token
+  private async promptForToken(): Promise<string> {
+    if (!this.authPromptCallback) {
+      throw new Error('Authentication required. Please log into Activepieces and try again.');
+    }
+
+    const message = `Please copy your authentication token from Activepieces:
+    
+1. Open ${this.baseUrl} in a new tab
+2. Log in if not already logged in
+3. Open Developer Tools (F12)
+4. Go to Network tab
+5. Refresh the page or navigate around
+6. Find any API request (like /api/v1/flows)
+7. Copy the Authorization header value (remove "Bearer " prefix)
+8. Paste the token below:`;
+
+    return await this.authPromptCallback(message);
+  }
+
+  // Get valid session token
+  private async getValidToken(): Promise<string> {
+    // Try to use cached token if valid
+    if (this.sessionToken && this.isTokenValid(this.sessionToken.token)) {
+      return this.sessionToken.token;
+    }
+
+    // Try to extract from browser
+    const browserToken = this.extractTokenFromBrowser();
+    if (browserToken && this.isTokenValid(browserToken)) {
+      const parsed = this.parseJWT(browserToken);
+      this.sessionToken = {
+        token: browserToken,
+        expiresAt: (parsed.exp || 0) * 1000,
+        projectId: parsed.projectId || this.projectId
+      };
+      return browserToken;
+    }
+
+    // Prompt user for fresh token
+    const userToken = await this.promptForToken();
+    if (!userToken) {
+      throw new Error('Authentication token is required');
+    }
+
+    // Clean token (remove "Bearer " if present)
+    const cleanToken = userToken.replace(/^Bearer\s+/i, '').trim();
+    
+    if (!this.isTokenValid(cleanToken)) {
+      throw new Error('Invalid or expired token provided');
+    }
+
+    const parsed = this.parseJWT(cleanToken);
+    this.sessionToken = {
+      token: cleanToken,
+      expiresAt: (parsed.exp || 0) * 1000,
+      projectId: parsed.projectId || this.projectId
+    };
+
+    return cleanToken;
+  }
+
+  // Make authenticated API request
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const url = `${this.baseUrl}/api/v1${endpoint}`;
+    
+    // Get valid token for authenticated requests
+    const needsAuth = !endpoint.includes('/health') && !endpoint.includes('/pieces');
+    let headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string> || {}),
+    };
+
+    if (needsAuth) {
+      const token = await this.getValidToken();
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    console.log('Making request to:', url, { 
+      endpoint, 
+      hasAuth: needsAuth,
+      method: options.method || 'GET'
+    });
+
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('API request failed:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText,
+        url
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        // Clear cached token and retry once
+        this.sessionToken = null;
+        throw new Error('Authentication failed. Please log into Activepieces and try again.');
+      }
+
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    return response.json();
+  }
+
+  // Real flow creation using authenticated API
   async createFlow(data: CreateFlowRequest): Promise<ActivepiecesFlow> {
     try {
-      // For self-hosted instances, use direct database approach
-      return await this.createFlowDirect(data);
+      console.log('Creating real flow in Activepieces:', data);
+      
+      const response = await this.request<ActivepiecesFlow>('/flows', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...data,
+          projectId: this.sessionToken?.projectId || this.projectId
+        }),
+      });
+
+      console.log('Flow created successfully:', response);
+      return response;
     } catch (error) {
       console.error('Flow creation failed:', error);
-      throw new Error(`Failed to create flow in self-hosted Activepieces: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Failed to create flow: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   // Simplified methods for self-hosted instances
   async listFlows(): Promise<ActivepiecesFlow[]> {
-    // For self-hosted, we could query the database directly
-    console.log('Listing flows for project:', this.projectId);
-    return [];
+    try {
+      return await this.request<ActivepiecesFlow[]>('/flows');
+    } catch (error) {
+      console.error('Failed to list flows:', error);
+      return [];
+    }
   }
 
   async getFlow(flowId: string): Promise<ActivepiecesFlow> {
-    throw new Error('Not implemented for self-hosted - use direct database query');
+    return await this.request<ActivepiecesFlow>(`/flows/${flowId}`);
   }
 
   async deleteFlow(flowId: string): Promise<void> {
-    console.log('Deleting flow:', flowId);
+    await this.request(`/flows/${flowId}`, { method: 'DELETE' });
   }
 
   async executeFlow(flowId: string, input: any = {}): Promise<ActivepiecesRun> {
-    const runId = `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const now = new Date().toISOString();
-    
-    return {
-      id: runId,
-      flowId,
-      status: 'RUNNING',
-      started: now,
-      input
-    };
+    return await this.request<ActivepiecesRun>(`/flows/${flowId}/runs`, {
+      method: 'POST',
+      body: JSON.stringify({ input })
+    });
   }
 
   async listRuns(flowId?: string, status?: string, limit: number = 50): Promise<ActivepiecesRun[]> {
-    return [];
+    const params = new URLSearchParams();
+    if (flowId) params.append('flowId', flowId);
+    if (status) params.append('status', status);
+    params.append('limit', limit.toString());
+
+    return await this.request<ActivepiecesRun[]>(`/flow-runs?${params.toString()}`);
   }
 
   async listPieces(): Promise<any[]> {
     // This endpoint works without auth, so we can still use it
     try {
-      const response = await fetch(`${this.baseUrl}/api/v1/pieces`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        return response.json();
-      }
-      return [];
+      return await this.request<any[]>('/pieces');
     } catch (error) {
       console.error('Failed to fetch pieces:', error);
       return [];
@@ -164,16 +316,8 @@ class ActivepiecesClient {
 
   async healthCheck(): Promise<{ status: string; version?: string; authRequired?: boolean }> {
     try {
-      const healthResponse = await fetch(`${this.baseUrl}/api/v1/health`, {
-        method: 'GET',
-      });
-
-      if (healthResponse.ok) {
-        const healthData = await healthResponse.json();
-        return { status: 'healthy', version: healthData.version, authRequired: false };
-      }
-
-      return { status: 'unknown', authRequired: false };
+      const healthData = await this.request<any>('/health');
+      return { status: 'healthy', version: healthData.version, authRequired: false };
     } catch (error) {
       return { 
         status: 'error',
@@ -322,49 +466,60 @@ class ActivepiecesClient {
     }
   }
 
-  // Credential management methods (not needed for basic deployment)
+  // Credential management methods (now with real API)
   async createCredential(data: CreateCredentialRequest): Promise<ActivepiecesCredential> {
-    throw new Error('Credential management not implemented for self-hosted basic setup');
+    return await this.request<ActivepiecesCredential>('/app-connections', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
   }
 
   async listCredentials(): Promise<ActivepiecesCredential[]> {
-    return [];
+    return await this.request<ActivepiecesCredential[]>('/app-connections');
   }
 
   async getCredential(credentialId: string): Promise<ActivepiecesCredential> {
-    throw new Error('Credential management not implemented for self-hosted basic setup');
+    return await this.request<ActivepiecesCredential>(`/app-connections/${credentialId}`);
   }
 
   async deleteCredential(credentialId: string): Promise<void> {
-    console.log('Delete credential not implemented for self-hosted');
+    await this.request(`/app-connections/${credentialId}`, { method: 'DELETE' });
   }
 
   async testCredential(credentialId: string): Promise<{ valid: boolean; error?: string }> {
-    return { valid: false, error: 'Credential testing not implemented for self-hosted' };
+    try {
+      await this.request(`/app-connections/${credentialId}/test`, { method: 'POST' });
+      return { valid: true };
+    } catch (error) {
+      return { valid: false, error: error instanceof Error ? error.message : 'Test failed' };
+    }
   }
 
   async updateFlow(flowId: string, data: Partial<CreateFlowRequest>): Promise<ActivepiecesFlow> {
-    throw new Error('Flow updates not implemented for self-hosted basic setup');
+    return await this.request<ActivepiecesFlow>(`/flows/${flowId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
   }
 
   async startFlow(flowId: string): Promise<void> {
-    console.log('Starting flow:', flowId);
+    await this.request(`/flows/${flowId}/start`, { method: 'POST' });
   }
 
   async stopFlow(flowId: string): Promise<void> {
-    console.log('Stopping flow:', flowId);
+    await this.request(`/flows/${flowId}/stop`, { method: 'POST' });
   }
 
   async getRun(runId: string): Promise<ActivepiecesRun> {
-    throw new Error('Run details not implemented for self-hosted basic setup');
+    return await this.request<ActivepiecesRun>(`/flow-runs/${runId}`);
   }
 
   async getRunLogs(runId: string): Promise<any[]> {
-    return [];
+    return await this.request<any[]>(`/flow-runs/${runId}/logs`);
   }
 
   async getPiece(pieceName: string): Promise<any> {
-    throw new Error('Individual piece details not implemented for self-hosted basic setup');
+    return await this.request<any>(`/pieces/${pieceName}`);
   }
 }
 
