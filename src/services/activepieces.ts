@@ -73,7 +73,7 @@ class ActivepiecesClient {
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.baseUrl}/v1${endpoint}`;
+    const url = `${this.baseUrl}/api/v1${endpoint}`;
     
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -269,7 +269,7 @@ class ActivepiecesClient {
   async testConnection(): Promise<{ success: boolean; requiresAuth: boolean; error?: string }> {
     try {
       // Try to access a basic endpoint without authentication first
-      const response = await fetch(`${this.baseUrl}/v1/projects/${this.projectId}`, {
+      const response = await fetch(`${this.baseUrl}/api/v1/projects/${this.projectId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
