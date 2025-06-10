@@ -395,14 +395,14 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
             </div>
           </div>
           
-          {/* Deploy to Activepieces Button (only show for saved agents) */}
+          {/* Deploy Button (only show for saved agents) */}
           {agentId && (
             <button
-              onClick={handleActivepiecesDeploy}
+              onClick={() => setShowActivepiecesDeploy(true)}
               className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center space-x-2"
             >
               <Upload className="w-4 h-4" />
-              <span>Deploy to Activepieces</span>
+              <span>Deploy</span>
             </button>
           )}
         </div>
@@ -450,12 +450,14 @@ const AgentBuilder: React.FC<AgentBuilderProps> = ({ agentId, generatedAgent, on
         onClose={() => setShowPreview(false)}
       />
 
-      <ActivepiecesDeployment
-        isOpen={showActivepiecesDeploy}
-        onClose={() => setShowActivepiecesDeploy(false)}
-        agentId={agentId || 'new'}
-        agentName={agentName}
-      />
+      {showActivepiecesDeploy && (
+        <ActivepiecesDeployment
+          agentId={agentId || 'new'}
+          flowId={undefined}
+          onDeploy={handleActivepiecesDeploy}
+          onClose={() => setShowActivepiecesDeploy(false)}
+        />
+      )}
 
       <AddNodeModal
         isOpen={showAddModal}

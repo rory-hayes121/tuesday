@@ -177,7 +177,7 @@ const ActivepiecesDeployment: React.FC<ActivepiecesDeploymentProps> = ({
                   ) : (
                     <>
                       <Play className="w-4 h-4" />
-                      <span>Deploy to Activepieces</span>
+                      <span>Deploy</span>
                     </>
                   )}
                 </button>
