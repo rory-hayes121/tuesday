@@ -243,18 +243,6 @@ class ActivepiecesClient {
         return { status: 'healthy', version: healthData.version, authRequired: false };
       }
 
-      // Try the projects endpoint to test auth
-      const projectsResponse = await fetch(`${this.baseUrl}/v1/projects`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (projectsResponse.status === 401 || projectsResponse.status === 403) {
-        return { status: 'requires-auth', authRequired: true };
-      }
-
       return { status: 'unknown', authRequired: false };
     } catch (error) {
       return { 
@@ -268,8 +256,8 @@ class ActivepiecesClient {
   // Test connection to determine authentication requirements
   async testConnection(): Promise<{ success: boolean; requiresAuth: boolean; error?: string }> {
     try {
-      // Try to access a basic endpoint without authentication first
-      const response = await fetch(`${this.baseUrl}/api/v1/projects/${this.projectId}`, {
+      // Try to access the pieces endpoint which doesn't require authentication
+      const response = await fetch(`${this.baseUrl}/api/v1/pieces`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
