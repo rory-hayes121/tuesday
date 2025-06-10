@@ -62,7 +62,26 @@ async function createFlow(data: CreateFlowRequest): Promise<ActivepiecesFlow> {
       displayName: data.displayName
     });
 
-    // 1. First insert into flow_version table (must exist before flow references it)
+    // 1. First create flow record (without publishedVersionId - it's nullable)
+    await client.query(`
+      INSERT INTO flow (
+        id, 
+        "projectId", 
+        status, 
+        "externalId",
+        created,
+        updated
+      ) VALUES ($1, $2, $3, $4, $5, $6)
+    `, [
+      flowId,
+      PROJECT_ID,
+      data.status || 'ENABLED',
+      externalId,
+      now,
+      now
+    ]);
+
+    // 2. Then create flow_version record that references the flow
     await client.query(`
       INSERT INTO flow_version (
         id,
@@ -89,27 +108,9 @@ async function createFlow(data: CreateFlowRequest): Promise<ActivepiecesFlow> {
       now
     ]);
 
-    // 2. Then insert into flow table with reference to flow_version
-    await client.query(`
-      INSERT INTO flow (
-        id, 
-        "projectId", 
-        status, 
-        "publishedVersionId",
-        "externalId",
-        created,
-        updated
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, [
-      flowId,
-      PROJECT_ID,
-      data.status || 'ENABLED',
-      versionId,
-      externalId,
-      now,
-      now
-    ]);
-
+    // 3. Optional: Update flow with publishedVersionId (existing flows show this can be null)
+    // Based on debug data, we'll skip this step since existing flows have publishedVersionId: null
+    
     await client.query('COMMIT');
 
     const createdFlow: ActivepiecesFlow = {
