@@ -1,10 +1,8 @@
 /**
- * Activepieces Database Client
- * Direct PostgreSQL integration with self-hosted Activepieces instance
- * Bypasses REST API authentication issues by inserting directly into database
+ * Activepieces HTTP Client
+ * Calls our Netlify function which handles database operations server-side
+ * Fixes browser compatibility issues by moving database logic to backend
  */
-
-import { Pool, PoolClient } from 'pg';
 
 interface ActivepiecesFlow {
   id: string;
@@ -35,226 +33,112 @@ interface CreateFlowRequest {
   status?: 'ENABLED' | 'DISABLED';
 }
 
-class ActivepiecesDatabaseClient {
-  private pool: Pool;
+class ActivepiecesHttpClient {
+  private baseUrl: string;
   private projectId: string;
 
   constructor() {
     this.projectId = 'C8NIVPDXRrRamepemIuFV'; // Tuesday project ID
     
-    // Database connection configuration
-    this.pool = new Pool({
-      host: 'yamanote.proxy.rlwy.net',
-      port: 29615,
-      database: 'railway',
-      user: 'postgres',
-      password: 'LtOVybVUGQnWYjrzSDJjunnNQkBvBLQn',
-      ssl: false,
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
-    });
+    // Use Netlify function URL
+    this.baseUrl = '/.netlify/functions/activepieces';
 
-    console.log('Activepieces Database Client initialized:', {
+    console.log('Activepieces HTTP Client initialized:', {
       projectId: this.projectId,
-      mode: 'direct-database'
+      baseUrl: this.baseUrl,
+      mode: 'netlify-function'
     });
   }
 
-  // Generate Activepieces-compatible 21-character ID
-  private generateId(): string {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < 21; i++) {
-      result += characters.charAt(Math.floor(Math.random() * characters.length));
-    }
-    return result;
-  }
-
-  // Create flow in database
+  // Create flow via API
   async createFlow(data: CreateFlowRequest): Promise<ActivepiecesFlow> {
-    const client: PoolClient = await this.pool.connect();
-    
     try {
-      await client.query('BEGIN');
-
-      const flowId = this.generateId();
-      const versionId = this.generateId();
-      const now = new Date().toISOString();
-      const externalId = `tuesday-${Date.now()}`;
-
-      console.log('Creating flow in database:', {
-        flowId,
-        versionId,
-        displayName: data.displayName
+      console.log('Creating flow via API:', data);
+      
+      const response = await fetch(`${this.baseUrl}/flows`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
       });
 
-      // 1. Insert into flow table
-      await client.query(`
-        INSERT INTO flow (
-          id, 
-          "projectId", 
-          status, 
-          "publishedVersionId",
-          "externalId",
-          created,
-          updated
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `, [
-        flowId,
-        this.projectId,
-        data.status || 'ENABLED',
-        versionId,
-        externalId,
-        now,
-        now
-      ]);
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`API request failed: ${response.status} ${error}`);
+      }
 
-      // 2. Create trigger and flow definition
-      const flowDefinition = {
-        trigger: data.trigger,
-        steps: data.steps || []
-      };
-
-      // 3. Insert into flow_version table
-      await client.query(`
-        INSERT INTO flow_version (
-          id,
-          "flowId",
-          "displayName",
-          trigger,
-          valid,
-          state,
-          "schemaVersion",
-          "connectionIds",
-          created,
-          updated
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      `, [
-        versionId,
-        flowId,
-        data.displayName,
-        JSON.stringify(flowDefinition.trigger),
-        true,
-        'LOCKED',
-        '0.30.0',
-        [],
-        now,
-        now
-      ]);
-
-      await client.query('COMMIT');
-
-      const createdFlow: ActivepiecesFlow = {
-        id: flowId,
-        displayName: data.displayName,
-        status: (data.status || 'ENABLED') as 'ENABLED' | 'DISABLED',
-        projectId: this.projectId,
-        trigger: data.trigger,
-        steps: data.steps || [],
-        created: now,
-        updated: now
-      };
-
-      console.log('Flow created successfully in database:', createdFlow);
-      return createdFlow;
+      const flow = await response.json();
+      console.log('Flow created successfully via API:', flow);
+      return flow;
 
     } catch (error) {
-      await client.query('ROLLBACK');
-      console.error('Database flow creation failed:', error);
-      throw new Error(`Failed to create flow in database: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      client.release();
+      console.error('API flow creation failed:', error);
+      throw new Error(`Failed to create flow: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  // List flows from database
+  // List flows via API
   async listFlows(): Promise<ActivepiecesFlow[]> {
-    const client = await this.pool.connect();
-    
     try {
-      const result = await client.query(`
-        SELECT 
-          f.id,
-          f.status,
-          f.created,
-          f.updated,
-          fv."displayName",
-          fv.trigger
-        FROM flow f
-        LEFT JOIN flow_version fv ON f."publishedVersionId" = fv.id
-        WHERE f."projectId" = $1
-        AND f.status IS NOT NULL
-        ORDER BY f.created DESC
-      `, [this.projectId]);
+      const response = await fetch(`${this.baseUrl}/flows`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-      return result.rows.map(row => ({
-        id: row.id,
-        displayName: row.displayName || 'Untitled Flow',
-        status: row.status as 'ENABLED' | 'DISABLED',
-        projectId: this.projectId,
-        trigger: row.trigger || {},
-        steps: [],
-        created: row.created,
-        updated: row.updated
-      }));
+      if (!response.ok) {
+        console.error('Failed to list flows:', response.status);
+        return [];
+      }
+
+      return await response.json();
 
     } catch (error) {
       console.error('Failed to list flows:', error);
       return [];
-    } finally {
-      client.release();
     }
   }
 
   // Get specific flow
   async getFlow(flowId: string): Promise<ActivepiecesFlow> {
-    const client = await this.pool.connect();
-    
     try {
-      const result = await client.query(`
-        SELECT 
-          f.id,
-          f.status,
-          f.created,
-          f.updated,
-          fv."displayName",
-          fv.trigger
-        FROM flow f
-        LEFT JOIN flow_version fv ON f."publishedVersionId" = fv.id
-        WHERE f.id = $1
-      `, [flowId]);
+      const response = await fetch(`${this.baseUrl}/flows/${flowId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-      if (result.rows.length === 0) {
+      if (!response.ok) {
         throw new Error(`Flow ${flowId} not found`);
       }
 
-      const row = result.rows[0];
-      return {
-        id: row.id,
-        displayName: row.displayName || 'Untitled Flow',
-        status: row.status as 'ENABLED' | 'DISABLED',
-        projectId: this.projectId,
-        trigger: row.trigger || {},
-        steps: [],
-        created: row.created,
-        updated: row.updated
-      };
+      return await response.json();
 
-    } finally {
-      client.release();
+    } catch (error) {
+      throw new Error(`Failed to get flow: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   // Delete flow
   async deleteFlow(flowId: string): Promise<void> {
-    const client = await this.pool.connect();
-    
     try {
-      await client.query('DELETE FROM flow WHERE id = $1', [flowId]);
+      const response = await fetch(`${this.baseUrl}/flows/${flowId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete flow: ${response.status}`);
+      }
+
       console.log('Flow deleted:', flowId);
-    } finally {
-      client.release();
+    } catch (error) {
+      throw new Error(`Failed to delete flow: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -278,14 +162,26 @@ class ActivepiecesDatabaseClient {
   // Health check
   async healthCheck(): Promise<{ status: string; version?: string; authRequired?: boolean }> {
     try {
-      const client = await this.pool.connect();
-      await client.query('SELECT 1');
-      client.release();
-      return { status: 'healthy', authRequired: false };
+      const response = await fetch(`${this.baseUrl}/health`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        return { 
+          status: 'error',
+          version: `HTTP ${response.status}`,
+          authRequired: false
+        };
+      }
+
+      return await response.json();
     } catch (error) {
       return { 
         status: 'error',
-        version: error instanceof Error ? error.message : 'Database connection failed',
+        version: error instanceof Error ? error.message : 'Connection failed',
         authRequired: false
       };
     }
@@ -294,13 +190,11 @@ class ActivepiecesDatabaseClient {
   // Test connection
   async testConnection(): Promise<{ success: boolean; requiresAuth: boolean; error?: string }> {
     try {
-      const client = await this.pool.connect();
-      const result = await client.query('SELECT COUNT(*) FROM project WHERE id = $1', [this.projectId]);
-      client.release();
-      
+      const health = await this.healthCheck();
       return { 
-        success: result.rows[0].count > 0, 
-        requiresAuth: false 
+        success: health.status === 'healthy', 
+        requiresAuth: false,
+        error: health.status === 'error' ? health.version : undefined
       };
     } catch (error) {
       return { 
@@ -309,6 +203,16 @@ class ActivepiecesDatabaseClient {
         error: error instanceof Error ? error.message : 'Connection failed' 
       };
     }
+  }
+
+  // Generate ID (client-side, for mocks)
+  private generateId(): string {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < 21; i++) {
+      result += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return result;
   }
 
   // Helper method to transform Tuesday workflow to Activepieces flow (same as before)
@@ -451,14 +355,14 @@ class ActivepiecesDatabaseClient {
     }
   }
 
-  // Cleanup
+  // No cleanup needed for HTTP client
   async close(): Promise<void> {
-    await this.pool.end();
+    // No-op for HTTP client
   }
 }
 
 // Export singleton instance
-export const activepiecesDatabaseClient = new ActivepiecesDatabaseClient();
+export const activepiecesDatabaseClient = new ActivepiecesHttpClient();
 
 // Export types
 export type {
