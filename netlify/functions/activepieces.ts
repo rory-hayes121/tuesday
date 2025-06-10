@@ -62,28 +62,7 @@ async function createFlow(data: CreateFlowRequest): Promise<ActivepiecesFlow> {
       displayName: data.displayName
     });
 
-    // 1. Insert into flow table
-    await client.query(`
-      INSERT INTO flow (
-        id, 
-        "projectId", 
-        status, 
-        "publishedVersionId",
-        "externalId",
-        created,
-        updated
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, [
-      flowId,
-      PROJECT_ID,
-      data.status || 'ENABLED',
-      versionId,
-      externalId,
-      now,
-      now
-    ]);
-
-    // 2. Insert into flow_version table
+    // 1. First insert into flow_version table (must exist before flow references it)
     await client.query(`
       INSERT INTO flow_version (
         id,
@@ -106,6 +85,27 @@ async function createFlow(data: CreateFlowRequest): Promise<ActivepiecesFlow> {
       'LOCKED',
       '0.30.0',
       [],
+      now,
+      now
+    ]);
+
+    // 2. Then insert into flow table with reference to flow_version
+    await client.query(`
+      INSERT INTO flow (
+        id, 
+        "projectId", 
+        status, 
+        "publishedVersionId",
+        "externalId",
+        created,
+        updated
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
+      flowId,
+      PROJECT_ID,
+      data.status || 'ENABLED',
+      versionId,
+      externalId,
       now,
       now
     ]);
