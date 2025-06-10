@@ -232,6 +232,51 @@ async function debugSchema(): Promise<any> {
   }
 }
 
+// Debug function to compare flow structures
+async function compareFlows(): Promise<any> {
+  const client = await pool.connect();
+  
+  try {
+    // Get our Tuesday-created flows
+    const tuesdayFlows = await client.query(`
+      SELECT f.*, fv.*
+      FROM flow f
+      LEFT JOIN flow_version fv ON f.id = fv."flowId"
+      WHERE f."externalId" LIKE 'tuesday-%'
+      ORDER BY f.created DESC
+      LIMIT 2;
+    `);
+    
+    // Get existing Activepieces flows (not created by us)
+    const activepiecesFlows = await client.query(`
+      SELECT f.*, fv.*
+      FROM flow f
+      LEFT JOIN flow_version fv ON f."publishedVersionId" = fv.id
+      WHERE f."externalId" NOT LIKE 'tuesday-%'
+      AND f."projectId" = $1
+      ORDER BY f.created DESC
+      LIMIT 2;
+    `, [PROJECT_ID]);
+    
+    // Get schema versions in use
+    const schemaVersions = await client.query(`
+      SELECT "schemaVersion", COUNT(*) as count
+      FROM flow_version
+      GROUP BY "schemaVersion"
+      ORDER BY count DESC;
+    `);
+
+    return {
+      tuesdayFlows: tuesdayFlows.rows,
+      activepiecesFlows: activepiecesFlows.rows,
+      schemaVersions: schemaVersions.rows
+    };
+
+  } finally {
+    client.release();
+  }
+}
+
 export const handler: Handler = async (event, context) => {
   // Enable CORS
   const headers = {
@@ -294,6 +339,16 @@ export const handler: Handler = async (event, context) => {
 
     if (method === 'GET' && path === '/debug') {
       const result = await debugSchema();
+      
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify(result),
+      };
+    }
+
+    if (method === 'GET' && path === '/compare') {
+      const result = await compareFlows();
       
       return {
         statusCode: 200,
