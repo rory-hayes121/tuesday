@@ -198,17 +198,35 @@ class ActivepiecesClient {
 
   // Helper method to transform Tuesday workflow to Activepieces flow
   transformToActivepiecesFlow(agentData: any): CreateFlowRequest {
-    const { name, description, nodes, edges } = agentData;
+    // Add null/undefined checks to prevent crashes
+    if (!agentData) {
+      throw new Error('Agent data is required for transformation');
+    }
+
+    const { name, description, nodes = [], edges = [] } = agentData;
+
+    // Validate required fields
+    if (!name) {
+      throw new Error('Agent name is required');
+    }
+
+    if (!Array.isArray(nodes)) {
+      throw new Error('Nodes must be an array');
+    }
+
+    if (!Array.isArray(edges)) {
+      throw new Error('Edges must be an array');
+    }
 
     // Find trigger node (input type)
-    const triggerNode = nodes.find((node: any) => node.type === 'input');
+    const triggerNode = nodes.find((node: any) => node?.type === 'input');
     
     // Build trigger configuration
     const trigger = triggerNode ? {
       name: 'webhook',
       displayName: 'Manual Trigger',
       nextAction: nodes.find((node: any) => 
-        edges.some((edge: any) => edge.source === triggerNode.id && edge.target === node.id)
+        edges.some((edge: any) => edge?.source === triggerNode.id && edge?.target === node?.id)
       )?.id,
       settings: {
         inputSchema: triggerNode.data?.config || {}
@@ -219,12 +237,12 @@ class ActivepiecesClient {
       settings: {}
     };
 
-    // Transform nodes to Activepieces steps
+    // Transform nodes to Activepieces steps with safe access
     const steps = nodes
-      .filter((node: any) => node.type !== 'input')
+      .filter((node: any) => node?.type && node.type !== 'input')
       .map((node: any) => ({
-        name: this.mapNodeTypeToActivepiecesPiece(node.type),
-        displayName: node.data?.label || node.type,
+        name: this.mapNodeTypeToActivepiecesPiece(node.type || 'unknown'),
+        displayName: node.data?.label || node.type || 'Unknown Step',
         nextAction: this.findNextAction(node.id, edges, nodes),
         settings: this.transformNodeSettings(node),
       }));
@@ -249,44 +267,58 @@ class ActivepiecesClient {
   }
 
   private findNextAction(nodeId: string, edges: any[], nodes: any[]): string | undefined {
-    const outgoingEdge = edges.find(edge => edge.source === nodeId);
+    // Add safety checks
+    if (!nodeId || !Array.isArray(edges)) {
+      return undefined;
+    }
+
+    const outgoingEdge = edges.find(edge => edge?.source === nodeId);
     return outgoingEdge?.target;
   }
 
   private transformNodeSettings(node: any): any {
+    // Add safety checks for node data
+    if (!node) {
+      return {};
+    }
+
     const { type, data } = node;
+    
+    // Ensure data exists
+    const nodeData = data || {};
+    const config = nodeData.config || {};
     
     switch (type) {
       case 'prompt':
         return {
-          model: data.config?.model || 'gpt-4',
-          prompt: data.config?.instruction || data.config?.prompt || '',
-          temperature: data.config?.temperature || 0.7,
-          maxTokens: data.config?.maxTokens || 1000,
+          model: config.model || 'gpt-4',
+          prompt: config.instruction || config.prompt || '',
+          temperature: config.temperature || 0.7,
+          maxTokens: config.maxTokens || 1000,
         };
       
       case 'tool':
         return {
-          url: data.config?.endpoint || '',
-          method: data.config?.method || 'GET',
-          headers: data.config?.headers || {},
-          body: data.config?.body || {},
+          url: config.endpoint || '',
+          method: config.method || 'GET',
+          headers: config.headers || {},
+          body: config.body || {},
         };
       
       case 'logic':
         return {
-          condition: data.config?.condition || '',
-          branches: data.config?.branches || [],
+          condition: config.condition || '',
+          branches: config.branches || [],
         };
       
       case 'output':
         return {
-          template: data.config?.template || '',
-          format: data.config?.format || 'json',
+          template: config.template || '',
+          format: config.format || 'json',
         };
       
       default:
-        return data.config || {};
+        return config;
     }
   }
 
